@@ -10,8 +10,8 @@
     "coffee-script":"*",
     "zmq": "*",
     "q":"*",
-    "generic-pool":"*"
-
+    "generic-pool":"*",
+    "log4js":"*"
   },
   "devDependencies": {
     "grunt": "~0.4.1",
