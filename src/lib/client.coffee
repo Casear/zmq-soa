@@ -1,7 +1,7 @@
 zmq = require 'zmq'
 messages = require './message'
 logger = (require './logger').logger
-
+crypto = require 'crypto'
 class Client
   
   
@@ -10,6 +10,7 @@ class Client
     @done = false
     @service = ''
     @defaultTimeout = 10000
+    @callback={}
     l = arguments.length
     
     if l <= 3 and l > 1
@@ -63,9 +64,10 @@ class Client
   onClientMessage:(msg)->
     clearTimeout(@timeout)
     @done = true
-    if @callback
-      @callback(null, JSON.parse(msg.data))
-      delete @callback
+
+    if msg.envelope and @callback[msg.envelope]
+      @callback[msg.envelope](null, JSON.parse(msg.data))
+      delete @callback[msg.envelope]
   onWorkerMessage:(msg)->
     logger.debug('onWorkerMessage')
     if @workerCallback
@@ -89,24 +91,26 @@ class Client
         @connected = true;
       else
         logger.warn('client is already connected to the broker'); 
-  send:(service,msg,@callback,timeout)->
-    logger.debug(  'client : sending '+msg)
-    if @connected
-      if @callback
-        @socket.send(new messages.client.RequestMessage(service, JSON.stringify(msg)).toFrames());
+  send:(service,msg,callback,timeout)->
+    crypto.randomBytes 4,(ex,buf)->
+      logger.debug(  'client : sending '+msg)
+      if @connected
+        if callback
+          @socket.send(new messages.client.RequestMessage(service, JSON.stringify(msg),buf).toFrames());
+        else
+          @socket.send(new messages.client.RequestNoRMessage(service, JSON.stringify(msg),buf).toFrames());
+        logger.debug(  'client : sent '+msg)
+        if callback
+          @callback[buff.toString(hex)]=callback
+          @timeout = setTimeout((()->
+            unless @done
+              logger.error('client sending timeout. service:'+service + ' message:'+msg)
+              @callback[buff.toString(hex)]('response timeout')
+            delete @callback[buff.toString(hex)]
+          ).bind(@), timeout or @defaultTimeout)
       else
-        @socket.send(new messages.client.RequestNoRMessage(service, JSON.stringify(msg)).toFrames());
-      logger.debug(  'client : sent '+msg)
-      if @callback
-        @timeout = setTimeout((()->
-          unless @done
-            logger.error('client sending timeout. service:'+service + ' message:'+msg)
-            @callback('response timeout')
-          delete @callback;
-        ).bind(@), timeout or @defaultTimeout)
-    else
-      logger.error('client disconnected ')
-      if @callback
-        @callback('connect failed')
+        logger.error('client disconnected ')
+        if callback
+          callback('connect failed')
 module.exports = 
   Client : Client
