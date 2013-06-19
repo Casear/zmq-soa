@@ -101,12 +101,12 @@ class Client
         @timeout = setTimeout((()->
           unless @done
             logger.error('client sending timeout. service:'+service + ' message:'+msg)
-            @callback(new Error('timeout'))
+            @callback('response timeout')
           delete @callback;
         ).bind(@), timeout or @defaultTimeout)
     else
       logger.error('client disconnected ')
       if @callback
-        @callback(new Error('disconnected'))
+        @callback('connect failed')
 module.exports = 
   Client : Client

@@ -2,9 +2,8 @@
   "name":"zmq-soa",
   "version": "0.0.1",
   "private": false,
-  "scripts": {
-    "start": "node app.js"
-  },
+  "author": "Casear Chu <casear.chu@chuto.tw>",
+  "main": "index",
   "dependencies": {
     "redis": "*",
     "coffee-script":"*",
@@ -14,6 +13,7 @@
     "log4js":"*"
   },
   "devDependencies": {
+    "mocha":"*",
     "grunt": "~0.4.1",
     "grunt-contrib-coffee": "~0.6.6",
     "grunt-contrib-watch": "~0.3.1"
