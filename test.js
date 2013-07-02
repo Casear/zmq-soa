@@ -1,5 +1,5 @@
 (function() {
-  var logger, s, soa, t;
+  var logger, s, soa;
 
   soa = require('./index');
 
@@ -7,16 +7,10 @@
 
   s = new soa.Broker('tcp://*:8008', {});
 
-  t = new soa.Client('tcp://localhost:8008', {
-    service: '1234'
-  }, function(err, data) {
-    return logger.debug('get worker job');
-  });
-
-  setTimeout(function() {
-    return t.send('1234', 'test', function(err, data) {
-      return logger.debug('get worker feedback.' + (err || data));
-    });
+  setInterval(function() {
+    console.dir(s.workers);
+    console.dir(s.clients);
+    return console.dir(s.services);
   }, 5000);
 
 }).call(this);

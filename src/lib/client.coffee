@@ -32,7 +32,7 @@ class Client
         @service = options.service
       if options.timeout
         defaultTimeout = options.timeout
-      @ready()
+      @ready(options.info)
     
       
     
@@ -60,7 +60,17 @@ class Client
     logger.info('worker : received disconnect request')
     @socket.disconnect(@socket.last_endpoint)
     @connected = false
-  
+  onHeartbeat:()->
+    logger.debug('worker : received heartbeat request')
+    if @disconnected
+      clearTimeout(@disconnected)
+    @connected = true
+    console.log('connected:'+@connected)
+    setTimeout (()->
+      @socket.send(new messages.worker.HeartbeatMessage().toFrames())
+      if @conneted
+        @disconnected = setTimeout (()-> @conneted = false).bind(@),15000
+    ).bind(@),10000
   onClientMessage:(msg)->
     clearTimeout(@timeout)
     @done = true
@@ -76,24 +86,25 @@ class Client
         r = new messages.worker.ResponseMessage(msg.service,JSON.stringify(returnMsg))
         @socket.send(r.toFrames()) 
       @workerCallback(JSON.parse(msg.data), cb.bind(@))
-  ready:()->
+  ready:(data)->
     if @service
       logger.info('worker: '+@service + ' ready')
       unless @connected
-        @socket.send(new messages.worker.ReadyMessage(@service).toFrames())
-        @connected = true;
+        logger.warn('worker send ready message');
+        @socket.send(new messages.worker.ReadyMessage(@service,JSON.stringify(data)).toFrames())
+        @socket.send(new messages.worker.HeartbeatMessage().toFrames())
       else
         logger.warn('worker is already connected to the broker'); 
     else
       logger.info('client: ready')
       unless @connected
         @socket.send(new messages.client.ReadyMessage().toFrames())
-        @connected = true;
+        @socket.send(new messages.client.HeartbeatMessage().toFrames())
       else
         logger.warn('client is already connected to the broker'); 
   send:(service,msg,callback,timeout)->
-    crypto.randomBytes 4,(ex,buf)->
-      logger.debug(  'client : sending '+msg)
+    crypto.randomBytes 4,((ex,buf)->
+      logger.debug(  'client : sending '+msg+' connected:'+@connected)
       if @connected
         if callback
           @socket.send(new messages.client.RequestMessage(service, JSON.stringify(msg),buf).toFrames());
@@ -101,16 +112,17 @@ class Client
           @socket.send(new messages.client.RequestNoRMessage(service, JSON.stringify(msg),buf).toFrames());
         logger.debug(  'client : sent '+msg)
         if callback
-          @callback[buff.toString(hex)]=callback
+          @callback[buf.toString('hex')]=callback
           @timeout = setTimeout((()->
             unless @done
               logger.error('client sending timeout. service:'+service + ' message:'+msg)
-              @callback[buff.toString(hex)]('response timeout')
-            delete @callback[buff.toString(hex)]
+              @callback[buf.toString('hex')]('response timeout')
+            delete @callback[buf.toString('hex')]
           ).bind(@), timeout or @defaultTimeout)
       else
         logger.error('client disconnected ')
         if callback
           callback('connect failed')
+      ).bind(@)
 module.exports = 
   Client : Client

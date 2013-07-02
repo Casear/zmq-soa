@@ -10,6 +10,7 @@ types =
     REQUEST: 0x02
     REQUEST_NR: 0x03
     RESPONSE: 0x04
+    HEARTBEAT: 0x05
   worker: 
     READY: 0x01
     REQUEST: 0x02
@@ -55,10 +56,15 @@ class ClientRequestNoRMessage extends ClientMessage
 class ClientResponseMessage extends ClientMessage
   constructor:(service, data, envelope)->
     super(types.client.RESPONSE,service,data,envelope)
+class ClientHeartbeatMessage extends ClientMessage
+  constructor:(envelope)->
+    super(types.client.HEARTBEAT,null,null,envelope)
 
+
+    
 class WorkerReadyMessage extends WorkerMessage
-  constructor:(service, envelope)->
-    super(types.worker.READY,service,null,envelope)
+  constructor:(service, data,envelope)->
+    super(types.worker.READY,service,data,envelope)
 
 class WorkerRequestMessage extends WorkerMessage
   constructor:(service, data, envelope)->
@@ -80,12 +86,12 @@ fromFrames = (frames, hasEnvelope)->
   protocol = frames[0].toString('ascii')
   type = frames[1].toString('binary')
   service = frames[2]
-  data = frames.slice(4)
+  data = frames[4]
   if hasEnvelope
     protocol = frames[1].toString('ascii')
     type = frames[2].toString('binary')
     service = frames[3]
-    data = frames.slice(5)
+    data = frames[5]
     envelope = frames[0]
   
   if protocol is protocols.client
@@ -101,10 +107,13 @@ fromFrames = (frames, hasEnvelope)->
     else if type is types.client.RESPONSE.toString()
       logger.debug('types.client.RESPONSE')
       return new ClientResponseMessage(service, data, envelope)
+    else if type is types.client.HEARTBEAT.toString()
+      logger.debug('types.client.HEARTBEAT')
+      return new ClientHeartbeatMessage(envelope)
   else if protocol is protocols.worker
     if type is types.worker.READY.toString()
       logger.debug('types.worker.READY')
-      return new WorkerReadyMessage(service, envelope)
+      return new WorkerReadyMessage(service,data ,envelope)
     else if type is types.worker.REQUEST.toString()
       logger.debug('types.worker.REQUEST')
       return new WorkerRequestMessage(service, data)
@@ -126,6 +135,7 @@ module.exports =
     RequestMessage: ClientRequestMessage
     RequestNoRMessage: ClientRequestNoRMessage
     ResponseMessage: ClientResponseMessage
+    HeartbeatMessage: ClientHeartbeatMessage,
   worker:
     Message: WorkerMessage,
     ReadyMessage: WorkerReadyMessage,

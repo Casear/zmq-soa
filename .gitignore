@@ -6,7 +6,7 @@ lib-cov
 *.out
 *.pid
 *.gz
-
+sync
 node_modules
 pids
 logs
