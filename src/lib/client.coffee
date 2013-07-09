@@ -11,6 +11,7 @@ class Client
     @service = ''
     @defaultTimeout = 10000
     @callback={}
+    @callbackTimeout={}
     l = arguments.length
     
     if l <= 3 and l > 1
@@ -44,6 +45,9 @@ class Client
     if msg instanceof messages.client.ResponseMessage
       logger.debug('client get response message')
       @onClientMessage(msg)
+    else if msg instanceof messages.worker.ReadyMessage
+      logger.debug('worker need to send ready message')
+      ready()
     else if msg instanceof messages.worker.RequestMessage
       logger.debug('worker get request message')
       @onWorkerMessage(msg)
@@ -60,24 +64,27 @@ class Client
     logger.info('worker : received disconnect request')
     @socket.disconnect(@socket.last_endpoint)
     @connected = false
-  onHeartbeat:()->
+  onHeartbeat:(worker)->
     logger.debug('worker : received heartbeat request')
     if @disconnected
       clearTimeout(@disconnected)
     @connected = true
     console.log('connected:'+@connected)
     setTimeout (()->
-      @socket.send(new messages.worker.HeartbeatMessage().toFrames())
+      if(worker)
+        @socket.send(new messages.worker.HeartbeatMessage().toFrames())
+      else
+        @socket.send(new messages.client.HeartbeatMessage().toFrames())
       if @conneted
         @disconnected = setTimeout (()-> @conneted = false).bind(@),15000
     ).bind(@),10000
   onClientMessage:(msg)->
-    clearTimeout(@timeout)
-    @done = true
-
-    if msg.envelope and @callback[msg.envelope]
-      @callback[msg.envelope](null, JSON.parse(msg.data))
-      delete @callback[msg.envelope]
+    
+    hex = msg.envelope.toString('hex')
+    if msg.envelope and @callback[hex]
+      @callback[hex](null, JSON.parse(msg.data))
+      delete @callback[hex]
+      delete @callbackTimeout[hex]
   onWorkerMessage:(msg)->
     logger.debug('onWorkerMessage')
     if @workerCallback
@@ -112,12 +119,14 @@ class Client
           @socket.send(new messages.client.RequestNoRMessage(service, JSON.stringify(msg),buf).toFrames());
         logger.debug(  'client : sent '+msg)
         if callback
-          @callback[buf.toString('hex')]=callback
-          @timeout = setTimeout((()->
-            unless @done
+          hex = buf.toString('hex')
+          @callback[hex] = callback
+          @callbackTimeout[hex] = setTimeout((()->
+            if @callback[hex]
               logger.error('client sending timeout. service:'+service + ' message:'+msg)
               @callback[buf.toString('hex')]('response timeout')
-            delete @callback[buf.toString('hex')]
+            delete @callback[hex]
+            delete @callbackTimeout[hex]
           ).bind(@), timeout or @defaultTimeout)
       else
         logger.error('client disconnected ')

@@ -20,15 +20,14 @@ types =
 
 class Message 
   constructor:(@protocol, @type, @service, @data, @envelope)->
-    
   toFrames :()->
     frames = []
     if @envelope
       frames.push(@envelope)
     frames.push(@protocol)
-    frames.push(@type)
+    frames.push(new Buffer([@type]))
     if @service
-      frames.push(@service)
+      frames.push(@service) 
     if @data
       frames.push('')
       if Array.isArray(@data)
@@ -83,47 +82,49 @@ class WorkerDisconnectMessage extends WorkerMessage
 
 fromFrames = (frames, hasEnvelope)->
   frames = Array.prototype.slice.call(frames)
-  protocol = frames[0].toString('ascii')
-  type = frames[1].toString('binary')
-  service = frames[2]
-  data = frames[4]
+
   if hasEnvelope
+    envelope = frames[0]
     protocol = frames[1].toString('ascii')
-    type = frames[2].toString('binary')
+    type = frames[2].readInt8(0)
     service = frames[3]
     data = frames[5]
-    envelope = frames[0]
-  
+  else
+    protocol = frames[0].toString('ascii')
+    type = frames[1].readInt8(0)
+    service = frames[2]
+    data = frames[4]
   if protocol is protocols.client
-    if type is types.client.REQUEST.toString()
+    if type is types.client.REQUEST
       logger.debug('types.client.REQUEST')
       return new ClientRequestMessage(service, data, envelope)
-    else if type is types.client.READY.toString()
+    else if type is types.client.READY
       logger.debug('types.client.READY')
       return new ClientReadyMessage(service, data, envelope)
-    if type is types.client.REQUEST_NR.toString()
+    if type is types.client.REQUEST_NR
       logger.debug('types.client.REQUEST_NR')
       return new ClientRequestNoRMessage(service, data, envelope)
-    else if type is types.client.RESPONSE.toString()
+    else if type is types.client.RESPONSE
       logger.debug('types.client.RESPONSE')
       return new ClientResponseMessage(service, data, envelope)
-    else if type is types.client.HEARTBEAT.toString()
+    else if type is types.client.HEARTBEAT
       logger.debug('types.client.HEARTBEAT')
       return new ClientHeartbeatMessage(envelope)
   else if protocol is protocols.worker
-    if type is types.worker.READY.toString()
+    
+    if type is types.worker.READY
       logger.debug('types.worker.READY')
       return new WorkerReadyMessage(service,data ,envelope)
-    else if type is types.worker.REQUEST.toString()
+    else if type is types.worker.REQUEST
       logger.debug('types.worker.REQUEST')
       return new WorkerRequestMessage(service, data)
-    else if type is types.worker.RESPONSE.toString()
+    else if type is types.worker.RESPONSE
       logger.debug('types.worker.RESPONSE')
       return new WorkerResponseMessage(service, data)
-    else if type is types.worker.HEARTBEAT.toString()
+    else if type is types.worker.HEARTBEAT
       logger.debug('types.worker.HEARTBEAT')
       return new WorkerHeartbeatMessage(envelope)
-    else if type is types.worker.DISCONNECT.toString()
+    else if type is types.worker.DISCONNECT
       logger.debug('types.worker.DISCONNECT')
       return new WorkerDisconnectMessage(envelope)
     

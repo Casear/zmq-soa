@@ -86,6 +86,8 @@ class Broker extends EventEmitter
             delete @workers[envelope]
         ).bind(@),15000)
       @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
+    else
+      @socket.send(new messages.worker.ReadyMessage(null,null,envelope).toFrames())
   onClientHeartBeat:(message,envelope)->
     logger.debug('client  heartbeat')
     logger.debug(arguments)
