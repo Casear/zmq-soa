@@ -15,5 +15,5 @@ module.exports = (grunt) ->
   }
 
   grunt.loadNpmTasks('grunt-contrib-watch')
-  grunt.loadNpmTasks('grunt-contrib-coffee')
+  grunt.loadNpmTasks('grunt-iced-coffee')
   grunt.registerTask('default', ['coffee'])

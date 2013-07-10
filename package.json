@@ -1,28 +1,23 @@
 {
-  "name":"zmq-soa",
-  "version": "0.0.6",
+  "name": "zmq-soa",
+  "version": "0.0.7",
   "private": false,
   "author": "Casear Chu <casear.chu@chuto.tw>",
   "main": "index",
   "dependencies": {
     "redis": "*",
-    "coffee-script":"*",
+    "iced-coffee-script": "*",
     "zmq": "*",
-    "q":"*",
-    "generic-pool":"*",
-    "log4js":"*",
-    "underscore":"*"
+    "q": "*",
+    "generic-pool": "*",
+    "log4js": "*",
+    "underscore": "*"
   },
   "devDependencies": {
-    "mocha":"*",
+    "mocha": "*",
     "grunt": "~0.4.1",
     "grunt-contrib-coffee": "~0.6.6",
-    "grunt-contrib-watch": "~0.3.1"
+    "grunt-contrib-watch": "~0.3.1",
+    "grunt-iced-coffee": "~0.7.0-a"
   }
-
-
-
-
-
-
 }

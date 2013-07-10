@@ -19,7 +19,7 @@ types =
     DISCONNECT: 0x05
 
 class Message 
-  constructor:(@protocol, @type, @service, @data, @envelope)->
+  constructor:(@protocol, @type, @service, @data, @envelope,@mapping)->
   toFrames :()->
     frames = []
     if @envelope
@@ -28,17 +28,23 @@ class Message
     frames.push(new Buffer([@type]))
     if @service
       frames.push(@service) 
+    if @mapping
+      frames.push(@mapping)
+    else
+      frames.push('')
     if @data
       frames.push('')
       if Array.isArray(@data)
         frames = frames.concat(@data)
       else
         frames.push(@data)
+    
     frames;
+
  
 class ClientMessage extends Message
-  constructor:(type, service, data, envelope)->
-    super(protocols.client,type, service, data, envelope)
+  constructor:(type, service, data, envelope,mapping)->
+    super(protocols.client,type, service, data, envelope,mapping)
 class WorkerMessage extends Message
   constructor:(type, service, data, envelope)->
     super(protocols.worker,type, service, data, envelope)
@@ -47,14 +53,14 @@ class ClientReadyMessage extends ClientMessage
   constructor:(envelope)->
     super(types.client.READY,null,null,envelope)
 class ClientRequestMessage extends ClientMessage
-  constructor:(service, data, envelope)->
-    super(types.client.REQUEST,service,data,envelope)
+  constructor:(service, data, envelope,mapping)->
+    super(types.client.REQUEST,service,data,envelope,mapping)
 class ClientRequestNoRMessage extends ClientMessage
   constructor:(service, data, envelope)->
     super(types.client.REQUEST_NR,service,data,envelope)
 class ClientResponseMessage extends ClientMessage
-  constructor:(service, data, envelope)->
-    super(types.client.RESPONSE,service,data,envelope)
+  constructor:(service, data, envelope,mapping)->
+    super(types.client.RESPONSE,service,data,envelope,mapping)
 class ClientHeartbeatMessage extends ClientMessage
   constructor:(envelope)->
     super(types.client.HEARTBEAT,null,null,envelope)
@@ -87,19 +93,24 @@ fromFrames = (frames, hasEnvelope)->
   else
     if hasEnvelope
       envelope = frames[0]
+
       protocol = frames[1].toString('ascii')
       type = frames[2].readInt8(0)
       service = frames[3]
-      data = frames[5]
+      mapping = frames[4]
+      data = frames[6]
     else
+ 
       protocol = frames[0].toString('ascii')
       type = frames[1].readInt8(0)
       service = frames[2]
-      data = frames[4]
+      mapping = frames[3]
+      data = frames[5]
+   
     if protocol is protocols.client
       if type is types.client.REQUEST
         logger.debug('types.client.REQUEST')
-        return new ClientRequestMessage(service, data, envelope)
+        return new ClientRequestMessage(service, data, envelope, mapping)
       else if type is types.client.READY
         logger.debug('types.client.READY')
         return new ClientReadyMessage(service, data, envelope)
@@ -108,7 +119,7 @@ fromFrames = (frames, hasEnvelope)->
         return new ClientRequestNoRMessage(service, data, envelope)
       else if type is types.client.RESPONSE
         logger.debug('types.client.RESPONSE')
-        return new ClientResponseMessage(service, data, envelope)
+        return new ClientResponseMessage(service, data, envelope,mapping)
       else if type is types.client.HEARTBEAT
         logger.debug('types.client.HEARTBEAT')
         return new ClientHeartbeatMessage(envelope)

@@ -1,6 +1,8 @@
 (function() {
   var broker, client, logger, net, port, soa, worker, worker2, worker3, worker4;
 
+
+
   soa = require('../index');
 
   logger = require('../lib/logger').logger;
@@ -97,7 +99,7 @@
             }
             return done();
           });
-        }, 1000);
+        }, 3000);
       });
       it('should get message from client without response', function(done) {
         worker3 = new soa.Client('tcp://localhost:' + port, {
@@ -111,7 +113,7 @@
         return setTimeout(function() {
           broker.services['test3'].worker.should.equal(1);
           return client.send('test3', 'message');
-        }, 1000);
+        }, 3000);
       });
       return it('should get message from client and other worker', function(done) {
         worker4 = new soa.Client('tcp://localhost:' + port, {
@@ -138,10 +140,11 @@
             data.should.equal('message');
             return done();
           });
-        }, 1000);
+        }, 3000);
       });
     });
   });
+
 
   /*
   
@@ -168,6 +171,5 @@
     })
   })
   */
-
 
 }).call(this);

@@ -36,7 +36,7 @@ class Broker extends EventEmitter
         if message instanceof messages.client.RequestMessage
           if(@mapping[worklabel])
             logger.error('envelope exist')
-          @mapping[worklabel] = message.envelope
+          @mapping[worklabel] = message
           
         r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex')).toFrames()
         @socket.send(r)
@@ -56,13 +56,17 @@ class Broker extends EventEmitter
         @onClientRequest(message);
       if message instanceof messages.client.ReadyMessage
         logger.debug('broker: on client Ready')
+        @onClientReady(envelope)
+      if message instanceof messages.client.HeartbeatMessage
+        logger.debug('broker: on client Heartbeat')
+        @onClientHeartBeat( envelope)
     else if message instanceof messages.worker.Message
       
       if message instanceof messages.worker.ReadyMessage
         logger.debug('broker: on worker Ready')
-        @onWorkerReady(message, envelope)
+        @onWorkerReady(message,envelope)
       if message instanceof messages.worker.HeartbeatMessage
-        logger.debug('broker: on worker Ready')
+        logger.debug('broker: on worker heartbeat')
         @onWorkerHeartBeat(message, envelope)
       if message instanceof messages.worker.ResponseMessage
         logger.debug('broker: on worker Response')
@@ -70,35 +74,48 @@ class Broker extends EventEmitter
       else if message instanceof messages.worker.DisconnectMessage
         logger.debug('broker: on worker Disconnect')
         @onWorkerDisconnect(message);
-  onWorkerHeartBeat:(message,envelope)->
-    logger.debug('worker  heartbeat')
-    logger.debug(arguments)
-    if @workers[envelope]
-      clearTimeout(@workers[envelope].checkHeartbeat)
-      @workers[envelope].checkHeartbeat = setTimeout((()->
-        
-        if @workers[envelope]
-          index = _.indexOf(@services[@workers[envelope].service].waiting,envelope.toString('hex'))
-        
-          if index isnt -1
-            @services[@workers[envelope].service].waiting.splice index,1
-            @services[@workers[envelope].service].worker--
-            delete @workers[envelope]
-        ).bind(@),15000)
-      @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
     else
-      @socket.send(new messages.worker.ReadyMessage(null,null,envelope).toFrames())
-  onClientHeartBeat:(message,envelope)->
-    logger.debug('client  heartbeat')
-    logger.debug(arguments)
-    if @clients[envelope]
-      clearTimeout(@clients[envelope].checkHeartbeat)
+      logger.error('broker invalid request')
+      logger.error(arguments)
+      logger.error(message)
+     
+  onClientReady:(envelope)->
+    logger.info('client connect')
+    if not @clients[envelope]
+      @clients[envelope] = {}
       @clients[envelope].checkHeartbeat = setTimeout((()->
         if @clients[envelope]
           delete @clients[envelope]
         ).bind(@),15000)
+  onClientHeartBeat:(envelope)->
+    logger.debug('client  heartbeat')
+    if @clients[envelope]
+      clearTimeout(@clients[envelope].checkHeartbeat)
+      @clients[envelope].checkHeartbeat = setTimeout((()->
+          delete @clients[envelope]
+        ).bind(@),15000)
       @socket.send(new messages.client.HeartbeatMessage(envelope).toFrames())
-
+    else
+      @socket.send(new messages.client.ReadyMessage(null,null,envelope).toFrames())
+  onWorkerHeartBeat:(message,envelope)->
+    logger.debug('worker  heartbeat')
+    e = envelope.toString('hex')
+    if @workers[e]
+      clearTimeout(@workers[e].checkHeartbeat)
+      @workers[e].checkHeartbeat = setTimeout((()->
+        
+        if @workers[e]
+          index = _.indexOf(@services[@workers[e].service].waiting,envelope.toString('hex'))
+        
+          if index isnt -1
+            @services[@workers[e].service].waiting.splice index,1
+            @services[@workers[e].service].worker--
+            delete @workers[e]
+        ).bind(@),15000)
+      @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
+    else
+      @socket.send(new messages.worker.ReadyMessage(null,null,envelope).toFrames())
+  
   onClientRequest:(message)->
     if @services.hasOwnProperty(message.service.toString())
       @queue.push(message)
@@ -108,39 +125,41 @@ class Broker extends EventEmitter
     logger.debug(@mapping)
     workerlabel = envelope.toString('hex')
     if @mapping[workerlabel]
-      clientEnvelope = @mapping[workerlabel]
+      clientEnvelope = @mapping[workerlabel].envelope
+      mapEnvelope = @mapping[workerlabel].mapping
       delete @mapping[workerlabel]
-      @socket.send(new messages.client.ResponseMessage(message.service,message.data,clientEnvelope).toFrames())
+      @socket.send(new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope).toFrames())
     else
       logger.debug('onWorkerResponse without response')
     @services[message.service.toString()].waiting.push(workerlabel)
     @services[message.service.toString()].worker++
   onWorkerReady:(message, envelope)->
+    console.dir(message)
     service = message.service.toString()
     logger.debug('on service:'+service+' register')
-    
+    e = envelope.toString('hex')
     unless @services.hasOwnProperty(service)
       @services[service] =
         waiting : []
         worker : 0
     if message.data
-      @workers[envelope] = JSON.parse(message.data.toString())  
+      @workers[e] = JSON.parse(message.data.toString())  
     else
-      @workers[envelope] = {}
-    @workers[envelope].service = service
+      @workers[e] = {}
+    @workers[e].service = service
     @services[service].worker++
-    @services[service].waiting.push(envelope.toString('hex'))
+    @services[service].waiting.push(e)
     logger.debug(@services)
 
-    @workers[envelope].checkHeartbeat = setTimeout((()->
+    @workers[e].checkHeartbeat = setTimeout((()->
       
-      if @workers[envelope]
-        index = _.indexOf(@services[@workers[envelope].service].waiting,envelope.toString('hex'))
+      if @workers[e]
+        index = _.indexOf(@services[@workers[e].service].waiting,e)
         
         if index isnt -1
-          @services[@workers[envelope].service].waiting.splice index,1
-          @services[@workers[envelope].service].worker--
-          delete @workers[envelope]
+          @services[@workers[e].service].waiting.splice index,1
+          @services[@workers[e].service].worker--
+          delete @workers[e]
       ).bind(@),15000)
 
 

@@ -1,6 +1,8 @@
 (function() {
   var logger, s, soa;
 
+
+
   soa = require('./index');
 
   logger = require('./lib/logger').logger;

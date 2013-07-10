@@ -69,7 +69,7 @@ describe 'Messaging',()->
           done()
           )
         
-      ,1000)
+      ,3000)
     )
   
     it('should get message from client without response',(done)->
@@ -83,7 +83,7 @@ describe 'Messaging',()->
         broker.services['test3'].worker.should.equal(1)
         client.send('test3','message')
         
-      ,1000)
+      ,3000)
     )
     it('should get message from client and other worker',(done)->
       worker4 = new soa.Client('tcp://localhost:'+port,{service:'test4'},(data,cb)->
@@ -108,7 +108,7 @@ describe 'Messaging',()->
           done()
           )
         
-      ,1000)
+      ,3000)
     )    
 ###
 
