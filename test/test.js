@@ -85,7 +85,7 @@
           service: 'test2'
         }, function(data, cb) {
           logger.debug('get test2 message');
-          data.should.equal('message');
+          data.toString().should.equal('message');
           return cb(data);
         });
         return setTimeout(function() {
@@ -95,7 +95,8 @@
             if (err) {
               throw err;
             } else {
-              data.should.equal('message');
+              logger.error(data.toString());
+              data.toString().should.equal('message');
             }
             return done();
           });
@@ -106,7 +107,7 @@
           service: 'test3'
         }, function(data, cb) {
           logger.debug('get test3 message');
-          data.should.equal('message');
+          data.toString().should.equal('message');
           cb(data);
           return done();
         });
@@ -120,13 +121,13 @@
           service: 'test4'
         }, function(data, cb) {
           logger.debug('get test4 message');
-          data.should.equal('message');
+          data.toString().should.equal('message');
           return worker4.send('test', data, function(err, data) {
             logger.debug('get test message');
             if (err) {
               throw err;
             }
-            data.should.equal('message');
+            data.toString().should.equal('message');
             return cb(data);
           });
         });
@@ -137,7 +138,7 @@
             if (err) {
               throw err;
             }
-            data.should.equal('message');
+            data.toString().should.equal('message');
             return done();
           });
         }, 3000);

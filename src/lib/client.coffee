@@ -111,7 +111,7 @@ class Client
       hex = msg.mapping.toString('hex')
       if msg.mapping and @callback[hex]
         logger.debug('------------------callback---------------')
-        @callback[hex](null, JSON.parse(msg.data))
+        @callback[hex](null, msg.data)
         delete @callback[hex]
         delete @callbackTimeout[hex]
       else
@@ -123,9 +123,9 @@ class Client
     if @workerCallback
       logger.debug('run workerCallback')
       cb = (returnMsg)->
-        r = new messages.worker.ResponseMessage(msg.service,JSON.stringify(returnMsg))
+        r = new messages.worker.ResponseMessage(msg.service,returnMsg)
         @socket.send(r.toFrames()) 
-      @workerCallback(JSON.parse(msg.data), cb.bind(@))
+      @workerCallback(msg.data, cb.bind(@))
   ready:(data)->
     if @disconnected
       clearTimeout(@disconnected)
@@ -151,11 +151,10 @@ class Client
     logger.debug(  'client : sending '+msg+' connected:'+@connected)
     if @connected
       if callback
-        logger.error('req')
-        logger.error(new messages.client.RequestMessage(service, JSON.stringify(msg),null,buf).toFrames())
-        @socket.send(new messages.client.RequestMessage(service, JSON.stringify(msg),null,buf).toFrames());
+
+        @socket.send(new messages.client.RequestMessage(service, msg,null,buf).toFrames());
       else
-        @socket.send(new messages.client.RequestNoRMessage(service, JSON.stringify(msg),null).toFrames());
+        @socket.send(new messages.client.RequestNoRMessage(service, msg,null).toFrames());
       logger.debug(  'client : sent '+msg)
       if callback
         hex = buf.toString('hex')

@@ -55,7 +55,7 @@ describe 'Messaging',()->
     it('should get message from client',(done)->
       worker2 = new soa.Client('tcp://localhost:'+port,{service:'test2'},(data,cb)->
         logger.debug('get test2 message')
-        data.should.equal('message')  
+        data.toString().should.equal('message')  
         cb(data)
         )
       setTimeout(()->
@@ -65,7 +65,8 @@ describe 'Messaging',()->
           if err
             throw err
           else
-            data.should.equal('message')
+            logger.error(data.toString())
+            data.toString().should.equal('message')
           done()
           )
         
@@ -75,7 +76,7 @@ describe 'Messaging',()->
     it('should get message from client without response',(done)->
       worker3 = new soa.Client('tcp://localhost:'+port,{service:'test3'},(data,cb)->
         logger.debug('get test3 message')
-        data.should.equal('message')  
+        data.toString().should.equal('message')  
         cb(data)
         done()
         )
@@ -88,12 +89,12 @@ describe 'Messaging',()->
     it('should get message from client and other worker',(done)->
       worker4 = new soa.Client('tcp://localhost:'+port,{service:'test4'},(data,cb)->
         logger.debug('get test4 message')
-        data.should.equal('message')  
+        data.toString().should.equal('message')  
         worker4.send('test',data,(err,data)->
           logger.debug('get test message')
           if err 
             throw err
-          data.should.equal('message')
+          data.toString().should.equal('message')
           cb(data)
           )
         
@@ -104,7 +105,7 @@ describe 'Messaging',()->
           logger.debug('test4 client back')
           if err
             throw err
-          data.should.equal('message')
+          data.toString().should.equal('message')
           done()
           )
         
