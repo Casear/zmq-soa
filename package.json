@@ -1,6 +1,6 @@
 {
   "name": "zmq-soa",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": false,
   "author": "Casear Chu <casear.chu@chuto.tw>",
   "main": "index",

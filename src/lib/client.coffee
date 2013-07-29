@@ -3,8 +3,6 @@ messages = require './message'
 logger = (require './logger').logger
 crypto = require 'crypto'
 class Client
-  
-  
   constructor:()->
     @_isConnect = false
     @service = ''
@@ -13,9 +11,7 @@ class Client
     @callbackTimeout={}
     @options={}
     l = arguments.length
-    
     if l <= 3 and l > 1
-
       @socket = zmq.socket('dealer')
       logger.info(arguments[0]+' client connecting')
       @socket.connect arguments[0]
@@ -90,20 +86,17 @@ class Client
     if @disconnected
       clearTimeout(@disconnected)
     @connected = true
-    console.log('connected:'+@connected)
+    
     setTimeout (()->
-      
       if(worker)
         @socket.send(new messages.worker.HeartbeatMessage().toFrames())
       else
-        @socket.send(new messages.client.HeartbeatMessage().toFrames())
-      
+        @socket.send(new messages.client.HeartbeatMessage().toFrames()) 
       if @connected
-
         @disconnected = setTimeout (()-> 
           @connected = false
           logger.error('disconnected')
-          ).bind(@),15000
+        ).bind(@),15000
     ).bind(@),10000
   onClientMessage:(msg)->
     if msg.mapping
@@ -146,12 +139,9 @@ class Client
         logger.warn('client is already connected to the broker'); 
   send:(service,msg,callback,timeout)->
     buf = new Buffer( Math.floor(Math.random()*(128-1)+0) for num in [1..5])
-
-
     logger.debug(  'client : sending '+msg+' connected:'+@connected)
     if @connected
       if callback
-
         @socket.send(new messages.client.RequestMessage(service, msg,null,buf).toFrames());
       else
         @socket.send(new messages.client.RequestNoRMessage(service, msg,null).toFrames());
@@ -162,7 +152,7 @@ class Client
         @callbackTimeout[hex] = setTimeout((()->
           if @callback[hex]
             logger.error('client sending timeout. service:'+service + ' message:'+msg)
-            @callback[buf.toString('hex')]('response timeout')
+            @callback[hex]('response timeout')
           delete @callback[hex]
           delete @callbackTimeout[hex]
         ).bind(@), timeout or @defaultTimeout)

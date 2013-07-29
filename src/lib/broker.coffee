@@ -23,23 +23,20 @@ class Broker extends EventEmitter
     if @queue.length >0 
       
       message = @queue.shift()
-      logger.debug(message)
-      logger.debug('executeQueue length:'+@queue.length)
+      logger.debug(message,'executeQueue length:',@queue.length)
       service = message.service.toString()
       logger.debug('request '+service)
       if @services[service].worker > 0
-        
         worker = @services[service].waiting.shift()
         worklabel= worker
-        @services[service].worker--
-        
         if message instanceof messages.client.RequestMessage
           if(@mapping[worklabel])
-            logger.error('envelope exist')
-          @mapping[worklabel] = message
-          
-        r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex')).toFrames()
-        @socket.send(r)
+            setImmediate(@executeQueue.bind(@))
+          else
+            @mapping[worklabel] = message
+            r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex')).toFrames()
+            @socket.send(r)
+        @services[service].waiting.push(worker)
       else
         if @services[service]
           @queue.push(message)
@@ -131,8 +128,7 @@ class Broker extends EventEmitter
       @socket.send(new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope).toFrames())
     else
       logger.debug('onWorkerResponse without response')
-    @services[message.service.toString()].waiting.push(workerlabel)
-    @services[message.service.toString()].worker++
+    
   onWorkerReady:(message, envelope)->
     console.dir(message)
     service = message.service.toString()
