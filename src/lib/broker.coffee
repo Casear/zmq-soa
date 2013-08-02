@@ -143,8 +143,9 @@ class Broker extends EventEmitter
     else
       @workers[e] = {}
     @workers[e].service = service
-    @services[service].worker++
-    @services[service].waiting.push(e)
+    if @services[service].waiting[e]
+      @services[service].worker++
+      @services[service].waiting.push(e)
     logger.debug(@services)
 
     @workers[e].checkHeartbeat = setTimeout((()->

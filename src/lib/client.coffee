@@ -34,7 +34,7 @@ class Client
         if not @connected
           @ready(@options.info)
       ).bind(@)
-    , 1000*60*2
+    , 1000*3
       
     
   onMsg:()->
