@@ -4,7 +4,7 @@ logger = (require './logger').logger
 crypto = require 'crypto'
 class Client
   constructor:()->
-    @_isConnect = false
+    @connected = false
     @service = ''
     @defaultTimeout = 10000
     @callback={}
@@ -31,7 +31,7 @@ class Client
         defaultTimeout = @options.timeout
       @ready(@options.info)
     setInterval (()->
-        if not @_isConnect
+        if not @connected
           @ready(@options.info)
       ).bind(@)
     , 1000*60*2
@@ -120,12 +120,13 @@ class Client
         @socket.send(r.toFrames()) 
       @workerCallback(msg.data, cb.bind(@))
   ready:(data)->
-    if @disconnected
-      clearTimeout(@disconnected)
+    
     if @service
       logger.info('worker: '+@service + ' ready')
       unless @connected
         logger.warn('worker send ready message');
+        if @disconnected
+          clearTimeout(@disconnected)
         @socket.send(new messages.worker.ReadyMessage(@service,JSON.stringify(data)).toFrames())
         @socket.send(new messages.worker.HeartbeatMessage().toFrames())
       else
@@ -133,6 +134,8 @@ class Client
     else
       logger.info('client: ready')
       unless @connected
+        if @disconnected
+          clearTimeout(@disconnected)
         @socket.send(new messages.client.ReadyMessage().toFrames())
         @socket.send(new messages.client.HeartbeatMessage().toFrames())
       else
