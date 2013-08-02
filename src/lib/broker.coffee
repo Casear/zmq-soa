@@ -143,7 +143,7 @@ class Broker extends EventEmitter
     else
       @workers[e] = {}
     @workers[e].service = service
-    if not @services[service].waiting[e]
+    if not _.indexOf(@services[@workers[e].service].waiting,e)
       @services[service].worker++
       @services[service].waiting.push(e)
     logger.debug(@services)
