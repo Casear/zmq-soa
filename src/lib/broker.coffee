@@ -103,12 +103,13 @@ class Broker extends EventEmitter
       @workers[e].checkHeartbeat = setTimeout((()->
         
         if @workers[e]
-          index = _.indexOf(@services[@workers[e].service].waiting,envelope.toString('hex'))
-        
-          if index isnt -1
+          index = _.indexOf(@services[@workers[e].service].waiting, e)
+          while index isnt -1
             @services[@workers[e].service].waiting.splice index,1
             @services[@workers[e].service].worker--
-            delete @workers[e]
+            index = _.indexOf(@services[@workers[e].service].waiting, e)
+            if @workers[e]
+              delete @workers[e]
         ).bind(@),15000)
       @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
     else
