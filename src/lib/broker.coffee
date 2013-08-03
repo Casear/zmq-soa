@@ -28,6 +28,7 @@ class Broker extends EventEmitter
       logger.debug('request '+service)
       if @services[service].worker > 0
         worker = @services[service].waiting.shift()
+        @services[service].waiting.push(worker)
         worklabel= worker
         if message instanceof messages.client.RequestMessage
           if(@mapping[worklabel])
@@ -36,7 +37,7 @@ class Broker extends EventEmitter
             @mapping[worklabel] = message
             r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex')).toFrames()
             @socket.send(r)
-        @services[service].waiting.push(worker)
+        
       else
         if @services[service]
           @queue.push(message)
@@ -143,7 +144,7 @@ class Broker extends EventEmitter
     else
       @workers[e] = {}
     @workers[e].service = service
-    if not _.indexOf(@services[@workers[e].service].waiting,e)
+    if not _.indexOf(@services[service].waiting,e)
       @services[service].worker++
       @services[service].waiting.push(e)
     logger.debug(@services)
