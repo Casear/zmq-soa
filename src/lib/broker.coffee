@@ -4,15 +4,18 @@ messages = require './message'
 logger = (require './logger').logger
 EventEmitter = require('events').EventEmitter
 _ = require 'underscore'
+heartbeatTime = 20000
 class Broker extends EventEmitter
   
-  constructor:(endpoint,options)->
+  constructor:(endpoint,options,log)->
     @services = {}
     @workers = {}
     @clients = {}
     @queue = []  
     @mapping = {}
     @socket = zmq.socket('router')
+    if log
+      logger = log
     logger.info("broker "+endpoint + 'starting')
     @socket.bindSync(endpoint)
     logger.info("broker "+endpoint + ' started')
@@ -29,19 +32,32 @@ class Broker extends EventEmitter
       if @services[service].worker > 0
         worker = @services[service].waiting.shift()
         @services[service].waiting.push(worker)
-        worklabel= worker
-        if message instanceof messages.client.RequestMessage
-          if(@mapping[worklabel])
-            setImmediate(@executeQueue.bind(@))
-          else
+        if message.mapping
+          worklabel= message.mapping.toString('hex')
+        if message instanceof messages.client.RequestMessage or message instanceof messages.client.RequestNoRMessage   
+          if message instanceof messages.client.RequestMessage
             @mapping[worklabel] = message
-            r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex')).toFrames()
-            @socket.send(r)
+            @Timeout.bind(@)(worklabel,message.time*1000)
+          r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex'),message.mapping,message.time).toFrames()
+          @socket.send(r)
+          
         
       else
         if @services[service]
           @queue.push(message)
     setImmediate(@executeQueue.bind(@))
+  Timeout:(worklabel,time)->
+    setTimeout (()->
+       if @mapping[worklabel]
+        clientEnvelope = @mapping[worklabel].envelope
+        mapEnvelope = @mapping[worklabel].mapping
+        @socket.send(new messages.client.ResponseMessage(@mapping[worklabel].service,JSON.stringify({result:0,err:'服務回應逾時'}),clientEnvelope,mapEnvelope).toFrames())
+        logger.error(worklabel," to ",@mapping[worklabel].service.toString() , ' Timeout')
+        delete @mapping[worklabel]
+      ).bind(@)
+    ,time
+
+
   onMessage:(envelope, protocol, type)->
     logger.debug('broker on Message')
     logger.debug(arguments)
@@ -79,19 +95,21 @@ class Broker extends EventEmitter
      
   onClientReady:(envelope)->
     logger.info('client connect')
-    if not @clients[envelope]
-      @clients[envelope] = {}
-      @clients[envelope].checkHeartbeat = setTimeout((()->
-        if @clients[envelope]
-          delete @clients[envelope]
-        ).bind(@),15000)
+    e = envelope.toString('hex')
+    if not @clients[e]
+      @clients[e] = {}
+      @clients[e].checkHeartbeat = setTimeout((()->
+        if @clients[e]
+          delete @clients[e]
+        ).bind(@),heartbeatTime)
   onClientHeartBeat:(envelope)->
     logger.debug('client  heartbeat')
-    if @clients[envelope]
-      clearTimeout(@clients[envelope].checkHeartbeat)
-      @clients[envelope].checkHeartbeat = setTimeout((()->
-          delete @clients[envelope]
-        ).bind(@),15000)
+    e = envelope.toString('hex')
+    if @clients[e]
+      clearTimeout(@clients[e].checkHeartbeat)
+      @clients[e].checkHeartbeat = setTimeout((()->
+          delete @clients[e]
+        ).bind(@),heartbeatTime)
       @socket.send(new messages.client.HeartbeatMessage(envelope).toFrames())
     else
       @socket.send(new messages.client.ReadyMessage(null,null,envelope).toFrames())
@@ -107,10 +125,10 @@ class Broker extends EventEmitter
           while index isnt -1
             @services[@workers[e].service].waiting.splice index,1
             @services[@workers[e].service].worker--
-            index = _.indexOf(@services[@workers[e].service].waiting, e)
+            index = _.indexOf(@services[@workers[e].service].waiting, e)  
             if @workers[e]
               delete @workers[e]
-        ).bind(@),15000)
+        ).bind(@),heartbeatTime)
       @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
     else
       @socket.send(new messages.worker.ReadyMessage(null,null,envelope).toFrames())
@@ -118,21 +136,29 @@ class Broker extends EventEmitter
   onClientRequest:(message)->
     if @services.hasOwnProperty(message.service.toString())
       @queue.push(message)
+      logger.info(message.envelope.toString('hex')," to ",message.service.toString())
+    else
+      clientEnvelope = message.envelope
+      mapEnvelope = message.mapping  
+      @socket.send(new messages.client.ResponseMessage(message.service,JSON.stringify({result:0,err:'服務不存在'}),clientEnvelope,mapEnvelope).toFrames())
+      logger.info(message.envelope.toString('hex')," to ",message.service + " not exist")
   
   onWorkerResponse:(message,envelope)->   
     logger.debug('onWorkerResponse')
     logger.debug(@mapping)
-    workerlabel = envelope.toString('hex')
-    if @mapping[workerlabel]
-      clientEnvelope = @mapping[workerlabel].envelope
-      mapEnvelope = @mapping[workerlabel].mapping
-      delete @mapping[workerlabel]
-      @socket.send(new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope).toFrames())
-    else
-      logger.debug('onWorkerResponse without response')
+    if message.mapping
+      workerlabel = message.mapping.toString('hex')
+      if @mapping[workerlabel]
+        clientEnvelope = @mapping[workerlabel].envelope
+        mapEnvelope = @mapping[workerlabel].mapping
+        delete @mapping[workerlabel]
+        @socket.send(new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope).toFrames())
+        logger.info(workerlabel," to ",message.service.toString() , ' return')
+      else
+        logger.debug('onWorkerResponse without response')
     
   onWorkerReady:(message, envelope)->
-    console.dir(message)
+    logger.debug(message)
     service = message.service.toString()
     logger.debug('on service:'+service+' register')
     e = envelope.toString('hex')
@@ -145,9 +171,10 @@ class Broker extends EventEmitter
     else
       @workers[e] = {}
     @workers[e].service = service
-    if not _.indexOf(@services[service].waiting,e)
+    if _.indexOf(@services[service].waiting,e) is -1
       @services[service].worker++
       @services[service].waiting.push(e)
+
     logger.debug(@services)
 
     @workers[e].checkHeartbeat = setTimeout((()->
@@ -159,7 +186,7 @@ class Broker extends EventEmitter
           @services[@workers[e].service].waiting.splice index,1
           @services[@workers[e].service].worker--
           delete @workers[e]
-      ).bind(@),15000)
+      ).bind(@),heartbeatTime)
 
 
 

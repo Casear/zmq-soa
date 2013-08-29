@@ -75,14 +75,21 @@ describe 'Messaging',()->
   
     it('should get message from client without response',(done)->
       worker3 = new soa.Client('tcp://localhost:'+port,{service:'test3'},(data,cb)->
-        logger.debug('get test3 message')
+        logger.info('get test3 message')
         data.toString().should.equal('message')  
+        logger.info('send back from test3')
         cb(data)
+
+       
         done()
-        )
+       
+      )
       setTimeout(()->
+        logger.info('send test3 message')
         broker.services['test3'].worker.should.equal(1)
-        client.send('test3','message')
+        client.send('test3','message',()->
+          logger.info('back ')
+        )
         
       ,3000)
     )

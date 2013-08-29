@@ -106,14 +106,18 @@
         worker3 = new soa.Client('tcp://localhost:' + port, {
           service: 'test3'
         }, function(data, cb) {
-          logger.debug('get test3 message');
+          logger.info('get test3 message');
           data.toString().should.equal('message');
+          logger.info('send back from test3');
           cb(data);
           return done();
         });
         return setTimeout(function() {
+          logger.info('send test3 message');
           broker.services['test3'].worker.should.equal(1);
-          return client.send('test3', 'message');
+          return client.send('test3', 'message', function() {
+            return logger.info('back ');
+          });
         }, 3000);
       });
       return it('should get message from client and other worker', function(done) {

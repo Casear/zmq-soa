@@ -6,7 +6,7 @@ class Client
   constructor:()->
     @connected = false
     @service = ''
-    @defaultTimeout = 10000
+    @defaultTimeout = 10
     @callback={}
     @callbackTimeout={}
     @options={}
@@ -74,7 +74,8 @@ class Client
           type : frames[1].readInt8(0)
           service : frames[2].toString()
           mapping : frames[3]
-          data : frames[5].toString()
+          time : frames[4]
+          data : frames[6].toString()
         }
       )
   onDisconnect:()->
@@ -115,8 +116,9 @@ class Client
     logger.debug('onWorkerMessage')
     if @workerCallback
       logger.debug('run workerCallback')
+      logger.debug(msg)
       cb = (returnMsg)->
-        r = new messages.worker.ResponseMessage(msg.service,returnMsg)
+        r = new messages.worker.ResponseMessage(msg.service,returnMsg,null,msg.mapping)
         @socket.send(r.toFrames()) 
       @workerCallback(msg.data, cb.bind(@))
   ready:(data)->
@@ -145,20 +147,21 @@ class Client
     logger.debug(  'client : sending '+msg+' connected:'+@connected)
     if @connected
       if callback
-        @socket.send(new messages.client.RequestMessage(service, msg,null,buf).toFrames());
+        @socket.send(new messages.client.RequestMessage(service, msg,null,buf,timeout).toFrames());
       else
-        @socket.send(new messages.client.RequestNoRMessage(service, msg,null).toFrames());
+        @socket.send(new messages.client.RequestNoRMessage(service, msg,null,timeout).toFrames());
       logger.debug(  'client : sent '+msg)
       if callback
         hex = buf.toString('hex')
         @callback[hex] = callback
+        logger.debug('timeout '+(timeout or @defaultTimeout)*1000)
         @callbackTimeout[hex] = setTimeout((()->
           if @callback[hex]
             logger.error('client sending timeout. service:'+service + ' message:'+msg)
             @callback[hex]('response timeout')
           delete @callback[hex]
           delete @callbackTimeout[hex]
-        ).bind(@), timeout or @defaultTimeout)
+        ).bind(@), (timeout or @defaultTimeout)*1000)
     else
       logger.error('client disconnected ')
       if callback
