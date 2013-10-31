@@ -1,10 +1,15 @@
 redis = require 'redis'
 zmq = require 'zmq'
+fs = require 'fs'
+crypto = require 'crypto'
 messages = require './message'
 logger = (require './logger').logger
 EventEmitter = require('events').EventEmitter
+rsa = require('./rsaCrypto').rsaCrypto
 _ = require 'underscore'
+ursa = require 'ursa'
 heartbeatTime = 20000
+keySize = 2048
 class Broker extends EventEmitter
   
   constructor:(endpoint,options,log)->
@@ -13,9 +18,35 @@ class Broker extends EventEmitter
     @clients = {}
     @queue = []  
     @mapping = {}
+    @rsaCrypto = {}
+    @pubKey = {}
+    @privKey = {}
     @socket = zmq.socket('router')
+    @Auth = (service,data,cb)->
+      if data.auth 
+        if cb
+          cb true,data
+        else
+          cb false
+      else
+        cb false
     if log
       logger = log
+    if options.cert
+      keyContent = fs.readFileSync(options.cert)
+      @rsaCrypto = new rsa(keySize,keyContent)
+      @pubKey = @rsaCrypto.toPem(false)
+      @privKey = @rsaCrypto.toPem(true)
+    else if fs.existsSync('./key.pem')
+      keyContent = fs.readFileSync('./key.pem')
+      @rsaCrypto = new rsa(keySize,keyContent)
+      @pubKey = @rsaCrypto.toPem(false)
+      @privKey = @rsaCrypto.toPem(true)
+    if not ursa.isKey(@pubKey) 
+      @rsaCrypto = new rsa(keySize)
+      @pubKey = @rsaCrypto.toPem(false)
+      @privKey = @rsaCrypto.toPem(true)
+      fs.writeFileSync('./key.pem',@privKey)
     logger.info("broker "+endpoint + 'starting')
     @socket.bindSync(endpoint)
     logger.info("broker "+endpoint + ' started')
@@ -23,8 +54,7 @@ class Broker extends EventEmitter
     setImmediate(@executeQueue.bind(@))
   executeQueue:()->
 
-    if @queue.length >0 
-      
+    if @queue.length >0      
       message = @queue.shift()
       logger.debug(message,'executeQueue length:',@queue.length)
       service = message.service.toString()
@@ -40,8 +70,6 @@ class Broker extends EventEmitter
             @Timeout.bind(@)(worklabel,message.time*1000)
           r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex'),message.mapping,message.time).toFrames()
           @socket.send(r)
-          
-        
       else
         if @services[service]
           @queue.push(message)
@@ -57,42 +85,96 @@ class Broker extends EventEmitter
       ).bind(@)
     ,time
 
-
-  onMessage:(envelope, protocol, type)->
+  onMessage:(envelope)->
     logger.debug('broker on Message')
     logger.debug(arguments)
-    message = messages.fromFrames(arguments, true)
+    e = envelope.toString('hex')
+
+    if arguments.length is 3
+      if @workers[e]
+        logger.debug('worker try to descrypt')
+        s = new Buffer(arguments[2].toString(),'base64')
+        d = new Buffer(arguments[1].toString(),'base64')
+        if @workers[e].isReady 
+          if @workers[e].s.Verify(d,s)            
+            decipher = crypto.createDecipheriv('des3', @workers[e].k , @workers[e].i)
+            decrypted = decipher.update(d,'binary','hex')
+            decrypted += decipher.final('hex')
+            data = new Buffer(decrypted,'hex')
+            message = messages.fromJSON(JSON.parse(data.toString()))
+            logger.debug(data.toString())
+            logger.debug(message)
+            logger.debug('Decrypt Success')
+          else
+            logger.debug('Signature failed')
+        else
+          logger.debug('Worker is not Ready')
+
+      else if @clients[e]
+        logger.debug('client try to descrypt')
+        s = new Buffer(arguments[2].toString(),'base64')
+        d = new Buffer(arguments[1].toString(),'base64')
+        if @clients[e].isReady 
+          if @clients[e].s.Verify(d,s)
+            decipher = crypto.createDecipheriv('des3', @clients[e].k , @clients[e].i)
+            decrypted = decipher.update(d,'binary','hex')
+            decrypted += decipher.final('hex')
+            data = new Buffer(decrypted,'hex')
+            message = messages.fromJSON(JSON.parse(data.toString()))
+            logger.debug('Client Decrypt Success')
+          else
+            logger.debug('Client Signature failed')
+        else
+          logger.debug('Clients is not Ready')
+    else 
+      message = messages.fromFrames(arguments, true)
     
-    if message instanceof messages.client.Message
+    if message 
+      if message instanceof messages.client.Message
       
-      if message instanceof messages.client.RequestMessage or message instanceof messages.client.RequestNoRMessage
-        logger.debug('broker: on client Request')
-        @onClientRequest(message);
-      if message instanceof messages.client.ReadyMessage
-        logger.debug('broker: on client Ready')
-        @onClientReady(envelope)
-      if message instanceof messages.client.HeartbeatMessage
-        logger.debug('broker: on client Heartbeat')
-        @onClientHeartBeat( envelope)
-    else if message instanceof messages.worker.Message
-      
-      if message instanceof messages.worker.ReadyMessage
-        logger.debug('broker: on worker Ready')
-        @onWorkerReady(message,envelope)
-      if message instanceof messages.worker.HeartbeatMessage
-        logger.debug('broker: on worker heartbeat')
-        @onWorkerHeartBeat(message, envelope)
-      if message instanceof messages.worker.ResponseMessage
-        logger.debug('broker: on worker Response')
-        @onWorkerResponse(message, envelope)
-      else if message instanceof messages.worker.DisconnectMessage
-        logger.debug('broker: on worker Disconnect')
-        @onWorkerDisconnect(message);
-    else
-      logger.error('broker invalid request')
-      logger.error(arguments)
-      logger.error(message)
-     
+        if message instanceof messages.client.RequestMessage or message instanceof messages.client.RequestNoRMessage
+          logger.debug('broker: on client Request')
+          @onClientRequest(message);
+        else if message instanceof messages.client.ReadyMessage
+          logger.debug('broker: on client Ready')
+          @onClientReady(envelope)
+        else if message instanceof messages.client.HeartbeatMessage
+          logger.debug('broker: on client Heartbeat')
+          @onClientHeartBeat( envelope)
+        else if message instanceof messages.client.HandshakeMessage
+          logger.debug('broker: on client HandShake')
+          @onClientHandshake(message,envelope)
+        else if message instanceof messages.client.AuthMessage
+          logger.debug('broker: on client Auth')
+          @onClientAuth(message,envelope)
+      else if message instanceof messages.worker.Message
+        
+        if message instanceof messages.worker.ReadyMessage
+          logger.debug('broker: on worker Ready')
+          @onWorkerReady(message,envelope)
+        else if message instanceof messages.worker.HeartbeatMessage
+          logger.debug('broker: on worker heartbeat')
+          @onWorkerHeartBeat(message, envelope)
+        else if message instanceof messages.worker.ResponseMessage
+          logger.debug('broker: on worker Response')
+          @onWorkerResponse(message, envelope)
+        else if message instanceof messages.worker.DisconnectMessage
+          logger.debug('broker: on worker Disconnect')
+          @onWorkerDisconnect(message);
+        else if message instanceof messages.worker.HandshakeMessage
+          logger.debug('broker: on worker Handshake')
+          @onWorkerHandshake(message,envelope)
+        else if message instanceof messages.worker.AuthMessage
+          logger.debug('broker: on worker Auth')
+          @onWorkerAuth(message,envelope)
+      else
+        logger.error('broker invalid request')
+        logger.error(arguments)
+        logger.error(message)
+     else
+        logger.error('broker invalid request')
+        logger.error(arguments)
+        logger.error(message)
   onClientReady:(envelope)->
     logger.info('client connect')
     e = envelope.toString('hex')
@@ -119,20 +201,25 @@ class Broker extends EventEmitter
     if @workers[e]
       clearTimeout(@workers[e].checkHeartbeat)
       @workers[e].checkHeartbeat = setTimeout((()->
-        
-        if @workers[e]
-          index = _.indexOf(@services[@workers[e].service].waiting, e)
-          while index isnt -1
-            @services[@workers[e].service].waiting.splice index,1
-            @services[@workers[e].service].worker--
-            index = _.indexOf(@services[@workers[e].service].waiting, e)  
-            if @workers[e]
-              delete @workers[e]
+        if @workers[e] 
+          if @services[@workers[e].service]
+            index = _.indexOf(@services[@workers[e].service].waiting, e)
+            while index isnt -1
+              @services[@workers[e].service].waiting.splice index,1
+              @services[@workers[e].service].worker--
+              index = _.indexOf(@services[@workers[e].service].waiting, e)  
+          delete @workers[e]
         ).bind(@),heartbeatTime)
       @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
     else
-      @socket.send(new messages.worker.ReadyMessage(null,null,envelope).toFrames())
-  
+      logger.error 'Worker isnt exist'
+      setTimeout((()->
+        if not @workers[e]
+          logger.debug('Heartbeat Send Handshake')
+          @socket.send(new messages.worker.HandshakeMessage(null,null,envelope).toFrames())
+        else
+          @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
+      ).bind(@),5000)
   onClientRequest:(message)->
     if @services.hasOwnProperty(message.service.toString())
       @queue.push(message)
@@ -156,8 +243,7 @@ class Broker extends EventEmitter
         logger.info(workerlabel," to ",message.service.toString() , ' return')
       else
         logger.debug('onWorkerResponse without response')
-    
-  onWorkerReady:(message, envelope)->
+  onWorkerInfo:(message, envelope)->
     logger.debug(message)
     service = message.service.toString()
     logger.debug('on service:'+service+' register')
@@ -167,31 +253,142 @@ class Broker extends EventEmitter
         waiting : []
         worker : 0
     if message.data
-      @workers[e] = JSON.parse(message.data.toString())  
+      logger.debug(message.data.toString())
+      try
+        d = @rsaCrypto.Decrypt(message.data)
+        desKey = d.toString()
+        @workers[e] = JSON.parse(message.data.toString())  
+      catch
+        
     else
       @workers[e] = {}
-    @workers[e].service = service
-    if _.indexOf(@services[service].waiting,e) is -1
-      @services[service].worker++
-      @services[service].waiting.push(e)
-
-    logger.debug(@services)
-
-    @workers[e].checkHeartbeat = setTimeout((()->
-      
-      if @workers[e]
-        index = _.indexOf(@services[@workers[e].service].waiting,e)
-        
-        if index isnt -1
-          @services[@workers[e].service].waiting.splice index,1
-          @services[@workers[e].service].worker--
-          delete @workers[e]
-      ).bind(@),heartbeatTime)
-
-
-
-  onWorkerDisconnect:(message)->
     
+
+
+  onWorkerReady:(message, envelope)->
+    
+  onWorkerAuth:(message,envelope)->
+    if message.data
+      logger.debug('Worker auth');
+      try
+        @Auth service,JSON.parse(message.data.toString()),(result,data)->
+          if result
+
+            logger.info('Worker：'+service+' Registration')
+            e = envelope.toString('hex')
+            if @workers[e]
+              @workers[e].service = service
+              if _.indexOf(@services[service].waiting,e) is -1
+                @services[service].worker++
+                @services[service].waiting.push(e)
+            @SendWithEncrypt new messages.worker.AuthMessage(data,envelope)
+          else
+            @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+      catch ex
+        @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+  onClientAuth:(message,envelope)->
+    logger.debug(message.data.toString());
+    try
+      @Auth service,JSON.parse(message.data.toString()),(result,data)->
+        if result
+
+          logger.info('Worker：'+service+' Registration')
+          e = envelope.toString('hex')
+          if @workers[e]
+            @workers[e].service = service
+            if _.indexOf(@services[service].waiting,e) is -1
+              @services[service].worker++
+              @services[service].waiting.push(e)
+          @SendWithEncrypt new messages.worker.AuthMessage(data,envelope)
+        else
+          @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+    catch ex
+      @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+  onWorkerHandshake:(message,envelope)->
+    if not message.data
+      logger.debug('send Handshake')
+      @socket.send(new messages.worker.HandshakeMessage(@pubKey,envelope).toFrames())
+      return
+    else
+      logger.debug('on Handshake')
+      e = envelope.toString('hex')
+      try
+        d = @rsaCrypto.Decrypt(message.data)
+        desKey = d.toString().split(',')
+        logger.debug(d.toString())
+        if desKey.length is 4
+          tick = (new Date()).getTime()
+          logger.debug(tick)
+          sendTick = parseInt(desKey[3])
+          logger.debug(sendTick)
+          if Math.abs(tick-sendTick)/100000000 <3  
+            @workers[e] = 
+              k : new Buffer(desKey[0],'base64')
+              i : new Buffer(desKey[1],'base64')
+              s : new rsa(keySize,desKey[2])
+              isReady : true
+            logger.debug("Send ReadyMsg")
+            @SendWithEncrypt(new messages.worker.ReadyMessage(envelope))
+          else
+
+            logger.error('msg timeout:' + Math.abs(tick-sendTick)/100000000)
+      catch
+        logger.error('decrypt failed '+message.data.toString())
+  onClientHandshake:(message,envelope)->
+    logger.debug(message.data)
+    if not message.data
+      logger.debug('send Handshake')
+      @socket.send(new messages.client.HandshakeMessage(@pubKey,envelope).toFrames())
+    else
+      logger.debug('on Handshake')
+      e = envelope.toString('hex')
+      
+      logger.debug(message.data.toString())
+      try
+
+        d = @rsaCrypto.Decrypt(message.data)
+        desKey = d.toString().split(',')
+        
+        if desKey.length is 4
+          tick = (new Date()).getTime()
+          sendTick = parseInt(desKey[3])
+          
+          if Math.abs(tick-sendTick)/100000000 <1
+           
+            @clients[e] = 
+              k : new Buffer(desKey[0],'base64')
+              i : new Buffer(desKey[1],'base64')
+              s : new rsa(keySize,desKey[2])        
+              isReady : true    
+            @SendWithEncrypt(new messages.client.ReadyMessage('',envelope),envelope)
+          else
+            logger.error('msg timeout')
+      catch
+        logger.error('decrypt failed '+message.data.toString())
+ 
+    
+  SendWithEncrypt:(msg)->
+    console.dir(msg)
+    try
+      e = msg.envelope.toString('hex')
+      if @workers[e] and @workers[e].isReady
+        
+        cipher = crypto.createCipheriv('des3', @workers[e].k, @workers[e].i) 
+        crypted = cipher.update(JSON.stringify(msg),'utf8','hex')
+        crypted += cipher.final('hex')
+        data = new Buffer(crypted,'hex')
+        hash = @rsaCrypto.Sign(data)
+        @socket.send([msg.envelope, data.toString('base64'),hash])
+      else if @clients[e] and @clients[e].isReady
+        cipher = crypto.createCipheriv('des3', @clients[e].k, @clients[e].i) 
+        crypted = cipher.update(JSON.stringify(msg),'utf8','hex')
+        crypted += cipher.final('hex')
+        data = new Buffer(crypted,'hex')
+        hash = @rsaCrypto.Sign(data)
+        @socket.send([msg.envelope, data.toString('base64'),hash])
+    catch ex
+      logger.error 'Encrypt Failed'
+      logger.error ex
 
   disconnectWorker:(envelope)->
     @socket.send(new messages.worker.DisconnectMessage(envelope).toFrames())
@@ -207,22 +404,6 @@ class Broker extends EventEmitter
       , @)
     , @)
 
-  findServiceBySender : (sender)->
-    knownService = ''
-    Object.keys(this.services).forEach(
-      (service)->
-        if @services[service].waiting.some((worker)-> sender.toString() == worker.toString() )
-          knownService = service
-    , @)
-    knownService
-
-
-  findIndexBySenderService : (sender, service)->
-    knownIndex = -1;
-    @services[service].waiting.forEach((worker, index)->
-      if worker.toString() == sender.toString()
-        knownIndex = index
-    )
-    knownIndex
+  
 module.exports = 
   Broker   : Broker

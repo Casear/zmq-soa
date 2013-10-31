@@ -1,6 +1,6 @@
 {
   "name": "zmq-soa",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "private": false,
   "author": "Casear Chu <casear.chu@chuto.tw>",
   "main": "index",
@@ -11,7 +11,8 @@
     "q": "*",
     "generic-pool": "*",
     "log4js": "*",
-    "underscore": "*"
+    "underscore": "*",
+    "ursa":"*"
   },
   "devDependencies": {
     "mocha": "*",
