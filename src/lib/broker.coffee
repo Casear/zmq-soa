@@ -22,10 +22,14 @@ class Broker extends EventEmitter
     @pubKey = {}
     @privKey = {}
     @socket = zmq.socket('router')
-    @Auth = (service,data,cb)->
+    @Auth = (data,cb)->
+      
       if data.auth 
         if cb
-          cb true,data
+          if data.service
+            cb true,data.service,data
+          else
+            cb true,null,data
         else
           cb false
       else
@@ -47,7 +51,7 @@ class Broker extends EventEmitter
       @pubKey = @rsaCrypto.toPem(false)
       @privKey = @rsaCrypto.toPem(true)
       fs.writeFileSync('./key.pem',@privKey)
-    logger.info("broker "+endpoint + 'starting')
+    logger.info("broker "+endpoint + ' starting')
     @socket.bindSync(endpoint)
     logger.info("broker "+endpoint + ' started')
     @socket.on('message', @onMessage.bind(@));
@@ -135,9 +139,6 @@ class Broker extends EventEmitter
         if message instanceof messages.client.RequestMessage or message instanceof messages.client.RequestNoRMessage
           logger.debug('broker: on client Request')
           @onClientRequest(message);
-        else if message instanceof messages.client.ReadyMessage
-          logger.debug('broker: on client Ready')
-          @onClientReady(envelope)
         else if message instanceof messages.client.HeartbeatMessage
           logger.debug('broker: on client Heartbeat')
           @onClientHeartBeat( envelope)
@@ -149,10 +150,7 @@ class Broker extends EventEmitter
           @onClientAuth(message,envelope)
       else if message instanceof messages.worker.Message
         
-        if message instanceof messages.worker.ReadyMessage
-          logger.debug('broker: on worker Ready')
-          @onWorkerReady(message,envelope)
-        else if message instanceof messages.worker.HeartbeatMessage
+        if message instanceof messages.worker.HeartbeatMessage
           logger.debug('broker: on worker heartbeat')
           @onWorkerHeartBeat(message, envelope)
         else if message instanceof messages.worker.ResponseMessage
@@ -166,6 +164,7 @@ class Broker extends EventEmitter
           @onWorkerHandshake(message,envelope)
         else if message instanceof messages.worker.AuthMessage
           logger.debug('broker: on worker Auth')
+          
           @onWorkerAuth(message,envelope)
       else
         logger.error('broker invalid request')
@@ -243,48 +242,40 @@ class Broker extends EventEmitter
         logger.info(workerlabel," to ",message.service.toString() , ' return')
       else
         logger.debug('onWorkerResponse without response')
-  onWorkerInfo:(message, envelope)->
-    logger.debug(message)
-    service = message.service.toString()
-    logger.debug('on service:'+service+' register')
-    e = envelope.toString('hex')
-    unless @services.hasOwnProperty(service)
-      @services[service] =
-        waiting : []
-        worker : 0
-    if message.data
-      logger.debug(message.data.toString())
-      try
-        d = @rsaCrypto.Decrypt(message.data)
-        desKey = d.toString()
-        @workers[e] = JSON.parse(message.data.toString())  
-      catch
-        
-    else
-      @workers[e] = {}
+
     
 
 
-  onWorkerReady:(message, envelope)->
     
   onWorkerAuth:(message,envelope)->
     if message.data
       logger.debug('Worker auth');
       try
-        @Auth service,JSON.parse(message.data.toString()),(result,data)->
+        @Auth JSON.parse(message.data.toString()),((result,service,data)->
           if result
-
+            
             logger.info('Worker：'+service+' Registration')
             e = envelope.toString('hex')
             if @workers[e]
               @workers[e].service = service
+              if not @services
+                @services = []
+              if not @services[service]
+                @services[service] = 
+                  waiting : []
+                  worker : 0
               if _.indexOf(@services[service].waiting,e) is -1
                 @services[service].worker++
-                @services[service].waiting.push(e)
+                @services[service].waiting.push(e)     
+            else
+              logger.error 'worker doesn\'t exist'
+            logger.debug(service + 'Registration')       
             @SendWithEncrypt new messages.worker.AuthMessage(data,envelope)
           else
             @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+          ).bind(@)
       catch ex
+        logger.error ex
         @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
   onClientAuth:(message,envelope)->
     logger.debug(message.data.toString());
@@ -292,18 +283,16 @@ class Broker extends EventEmitter
       @Auth service,JSON.parse(message.data.toString()),(result,data)->
         if result
 
-          logger.info('Worker：'+service+' Registration')
+          logger.info('Client  Registration')
           e = envelope.toString('hex')
-          if @workers[e]
-            @workers[e].service = service
-            if _.indexOf(@services[service].waiting,e) is -1
-              @services[service].worker++
-              @services[service].waiting.push(e)
-          @SendWithEncrypt new messages.worker.AuthMessage(data,envelope)
+          if @client[e]
+            @client[e].isAuth = trie
+            
+          @SendWithEncrypt new messages.client.AuthMessage(data,envelope)
         else
-          @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+          @SendWithEncrypt new messages.client.AuthMessage('','',envelope)
     catch ex
-      @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
+      @SendWithEncrypt new messages.client.AuthMessage('','',envelope)
   onWorkerHandshake:(message,envelope)->
     if not message.data
       logger.debug('send Handshake')
@@ -318,9 +307,7 @@ class Broker extends EventEmitter
         logger.debug(d.toString())
         if desKey.length is 4
           tick = (new Date()).getTime()
-          logger.debug(tick)
           sendTick = parseInt(desKey[3])
-          logger.debug(sendTick)
           if Math.abs(tick-sendTick)/100000000 <3  
             @workers[e] = 
               k : new Buffer(desKey[0],'base64')
@@ -330,7 +317,6 @@ class Broker extends EventEmitter
             logger.debug("Send ReadyMsg")
             @SendWithEncrypt(new messages.worker.ReadyMessage(envelope))
           else
-
             logger.error('msg timeout:' + Math.abs(tick-sendTick)/100000000)
       catch
         logger.error('decrypt failed '+message.data.toString())

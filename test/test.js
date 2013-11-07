@@ -54,13 +54,24 @@
     });
     describe('woker start', function() {
       return it('should create woker and test to connect the broker', function(done) {
-        worker = new soa.Client('tcp://localhost:' + port, {
+        worker = new soa.Client('localhost', port, {
           service: 'test'
         }, function(data, cb) {
           logger.debug('get test message');
           return cb(data);
         });
+        worker.on('connect', function() {
+          return logger.debug('woker connected');
+        });
+        worker.on('ready', function() {
+          logger.debug('worker ready');
+          return worker.Authenticate('123');
+        });
+        worker.on('ready', function() {
+          return logger.debug('woker connected');
+        });
         return setTimeout(function() {
+          logger.error(broker.services);
           broker.services['test'].worker.should.equal(1);
           return done();
         }, 1000);
@@ -68,7 +79,17 @@
     });
     return describe('client start', function() {
       return it('should create client and test to connect the broker', function(done) {
-        client = new soa.Client('tcp://localhost:' + port, {});
+        client = new soa.Client('localhost', port, {});
+        client.on('connect', function() {
+          return logger.debug('client connected');
+        });
+        client.on('ready', function() {
+          logger.debug('client ready');
+          return client.Authenticate('123');
+        });
+        client.on('ready', function() {
+          return logger.debug('client connected');
+        });
         return setTimeout(function() {
           broker.services['test'].worker.should.equal(1);
           return done();
@@ -81,12 +102,22 @@
     this.timeout(10000);
     return describe('worker get messages', function() {
       it('should get message from client', function(done) {
-        worker2 = new soa.Client('tcp://localhost:' + port, {
+        worker2 = new soa.Client('localhost', port, {
           service: 'test2'
         }, function(data, cb) {
           logger.debug('get test2 message');
           data.toString().should.equal('message');
           return cb(data);
+        });
+        worker2.on('connect', function() {
+          return logger.debug('woker4 connected');
+        });
+        worker2.on('ready', function() {
+          logger.debug('worker4 ready');
+          return worker2.Authenticate('123');
+        });
+        worker2.on('ready', function() {
+          return logger.debug('woker4 connected');
         });
         return setTimeout(function() {
           broker.services['test2'].worker.should.equal(1);
@@ -103,7 +134,7 @@
         }, 3000);
       });
       it('should get message from client without response', function(done) {
-        worker3 = new soa.Client('tcp://localhost:' + port, {
+        worker3 = new soa.Client('localhost', port, {
           service: 'test3'
         }, function(data, cb) {
           logger.info('get test3 message');
@@ -111,6 +142,16 @@
           logger.info('send back from test3');
           cb(data);
           return done();
+        });
+        worker3.on('connect', function() {
+          return logger.debug('woker4 connected');
+        });
+        worker3.on('ready', function() {
+          logger.debug('worker4 ready');
+          return worker3.Authenticate('123');
+        });
+        worker3.on('ready', function() {
+          return logger.debug('woker4 connected');
         });
         return setTimeout(function() {
           logger.info('send test3 message');
@@ -121,7 +162,7 @@
         }, 3000);
       });
       return it('should get message from client and other worker', function(done) {
-        worker4 = new soa.Client('tcp://localhost:' + port, {
+        worker4 = new soa.Client('localhost', port, {
           service: 'test4'
         }, function(data, cb) {
           logger.debug('get test4 message');
@@ -134,6 +175,16 @@
             data.toString().should.equal('message');
             return cb(data);
           });
+        });
+        worker4.on('connect', function() {
+          return logger.debug('woker4 connected');
+        });
+        worker4.on('ready', function() {
+          logger.debug('worker4 ready');
+          return worker4.Authenticate('123');
+        });
+        worker4.on('ready', function() {
+          return logger.debug('woker4 connected');
         });
         return setTimeout(function() {
           broker.services['test4'].worker.should.equal(1);

@@ -30,34 +30,59 @@ describe 'Initial',()->
           throw new Error('connection failed')
         )
     )
+
   describe 'woker start',()->
     it('should create woker and test to connect the broker',(done)->
-      worker = new soa.Client('tcp://localhost:'+port,{service:'test'},(data,cb)->
+      worker = new soa.Client('localhost',port,{service:'test'},(data,cb)->
         logger.debug('get test message')
         cb(data)
       )
+      worker.on 'connect',()->
+        logger.debug('woker connected')
+      worker.on 'ready',()->
+        logger.debug('worker ready')
+        worker.Authenticate('123')
+      worker.on 'ready',()->
+        logger.debug('woker connected')
       setTimeout(()->
+        logger.error broker.services
         broker.services['test'].worker.should.equal(1)
         done()
       ,1000)
     )
+
   describe 'client start',()->
     it('should create client and test to connect the broker',(done)->
-      client = new soa.Client('tcp://localhost:'+port,{})
+      client = new soa.Client('localhost',port,{})
+      client.on 'connect',()->
+        logger.debug('client connected')
+      client.on 'ready',()->
+        logger.debug('client ready')
+        client.Authenticate('123')
+      client.on 'ready',()->
+        logger.debug('client connected')
       setTimeout(()->
         broker.services['test'].worker.should.equal(1)
         done()
       ,1000)
     )
+
 describe 'Messaging',()->
   @timeout(10000)
   describe 'worker get messages',()->
     it('should get message from client',(done)->
-      worker2 = new soa.Client('tcp://localhost:'+port,{service:'test2'},(data,cb)->
+      worker2 = new soa.Client('localhost',port,{service:'test2'},(data,cb)->
         logger.debug('get test2 message')
         data.toString().should.equal('message')  
         cb(data)
         )
+      worker2.on 'connect',()->
+        logger.debug('woker4 connected')
+      worker2.on 'ready',()->
+        logger.debug('worker4 ready')
+        worker2.Authenticate('123')
+      worker2.on 'ready',()->
+        logger.debug('woker4 connected')
       setTimeout(()->
         broker.services['test2'].worker.should.equal(1)
         client.send('test2','message',(err,data)->
@@ -72,9 +97,9 @@ describe 'Messaging',()->
         
       ,3000)
     )
-  
+
     it('should get message from client without response',(done)->
-      worker3 = new soa.Client('tcp://localhost:'+port,{service:'test3'},(data,cb)->
+      worker3 = new soa.Client('localhost',port,{service:'test3'},(data,cb)->
         logger.info('get test3 message')
         data.toString().should.equal('message')  
         logger.info('send back from test3')
@@ -84,6 +109,13 @@ describe 'Messaging',()->
         done()
        
       )
+      worker3.on 'connect',()->
+        logger.debug('woker4 connected')
+      worker3.on 'ready',()->
+        logger.debug('worker4 ready')
+        worker3.Authenticate('123')
+      worker3.on 'ready',()->
+        logger.debug('woker4 connected')
       setTimeout(()->
         logger.info('send test3 message')
         broker.services['test3'].worker.should.equal(1)
@@ -93,8 +125,9 @@ describe 'Messaging',()->
         
       ,3000)
     )
+
     it('should get message from client and other worker',(done)->
-      worker4 = new soa.Client('tcp://localhost:'+port,{service:'test4'},(data,cb)->
+      worker4 = new soa.Client('localhost',port,{service:'test4'},(data,cb)->
         logger.debug('get test4 message')
         data.toString().should.equal('message')  
         worker4.send('test',data,(err,data)->
@@ -106,6 +139,14 @@ describe 'Messaging',()->
           )
         
         )
+      worker4.on 'connect',()->
+        logger.debug('woker4 connected')
+      worker4.on 'ready',()->
+        logger.debug('worker4 ready')
+        worker4.Authenticate('123')
+      worker4.on 'ready',()->
+        logger.debug('woker4 connected')
+
       setTimeout(()->
         broker.services['test4'].worker.should.equal(1)
         client.send('test4','message',(err,data)->
@@ -118,6 +159,8 @@ describe 'Messaging',()->
         
       ,3000)
     )    
+
+
 ###
 
 

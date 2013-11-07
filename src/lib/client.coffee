@@ -4,8 +4,9 @@ logger = (require './logger').logger
 crypto = require 'crypto'
 net = require('net')
 rsa = require('./rsaCrypto').rsaCrypto
+event = require("events")
 keySize = 2048
-class Client
+class Client extends event.EventEmitter
   constructor:()->
     @connected = false
     @service = null
@@ -41,7 +42,6 @@ class Client
         @isWorker = true
       if @options.timeout
         defaultTimeout = @options.timeout
-      @ready(@options.info)
       @TestReconnect()
   
     
@@ -51,23 +51,27 @@ class Client
     if arguments.length is 2
       logger.debug('msg try to descrypt')
       s = new Buffer(arguments[1].toString(),'base64')
+
       d = new Buffer(arguments[0].toString(),'base64')
-      if @signer 
-        if @signer.Verify(d,s)          
-          try  
-            decipher = crypto.createDecipheriv('des3', @key , @iv)
-            decrypted = decipher.update(d,'binary','hex')
-            decrypted += decipher.final('hex')
-            data = new Buffer(decrypted,'hex')
-            message = messages.fromJSON(JSON.parse(data.toString()))
-            logger.debug(data.toString())
-            logger.debug(message)
-            logger.debug('Decrypt Success')
-          catch ex
-            logger.error ex
+      
+      if @rsaPub 
+        try
+          if @rsaPub.Verify(d,s)          
+            try  
+              decipher = crypto.createDecipheriv('des3', @key , @iv)
+              decrypted = decipher.update(d,'binary','hex')
+              decrypted += decipher.final('hex')
+              data = new Buffer(decrypted,'hex')
+              msg = messages.fromJSON(JSON.parse(data.toString()))
+              logger.debug('Decrypt Success')
+            catch ex
+              logger.error ex
+              return
+          else
+            logger.debug('Signature failed')
             return
-        else
-          logger.debug('Signature failed')
+        catch ex
+          logger.error ex
           return
       else
         logger.debug('msg is not Ready')
@@ -88,10 +92,10 @@ class Client
       @onHeartbeat(@options.service)
     else if msg instanceof messages.client.HandshakeMessage
       logger.debug('client get auth message')
-      @onClientHandshake(msg)
+      @onHandshake(msg)
     else if msg instanceof messages.client.AuthMessage
       logger.debug('client get auth message')
-      @onClientAuth(msg)
+      @onAuth(msg)
     else if msg instanceof messages.worker.ReadyMessage
       logger.debug('worker need to send ready message')
       @ready(@options)
@@ -106,10 +110,10 @@ class Client
       @onHeartbeat(@options.service)
     else if msg instanceof messages.worker.HandshakeMessage
       logger.debug('worker get handshake message')
-      @onWorkerHandshake(msg)
+      @onHandshake(msg)
     else if msg instanceof messages.worker.AuthMessage
       logger.debug('worker get auth message')
-      @onWorkerAuth(msg)
+      @onAuth(msg)
     else
       logger.error('client invalid request')
       logger.error(arguments)
@@ -117,12 +121,12 @@ class Client
       frames = Array.prototype.slice.call(arguments)
       logger.error(
         {
-          protocol : frames[0].toString('ascii')
-          type : frames[1].readInt8(0)
-          service : frames[2].toString()
+          protocol : if frames[0] then frames[0].toString('ascii') else ""
+          type : if frames[1] then frames[1].readInt8(0) else ""
+          service : if frames[2] then frames[2].toString() else ""
           mapping : frames[3]
           time : frames[4]
-          data : frames[6].toString()
+          data : if frames[6] then frames[6].toString() else ""
         }
       )
   
@@ -140,8 +144,7 @@ class Client
         @connected = false
         @auth = false
         logger.error('disconnected')
-        if @onDisconnect
-          @onDisconnect()
+        @emit('disconnect')
         @TestReconnect()
       ).bind(@),20000
 
@@ -151,9 +154,7 @@ class Client
       clearTimeout(@disconnected)
     if not @connected
       @connected = true
-      if @onConnect
-        @onConnect()
-
+      @emit('connect')
     setTimeout (()->
       @sendHeartbeat()
     ).bind(@),10000
@@ -182,40 +183,41 @@ class Client
         r = new messages.worker.ResponseMessage(msg.service,returnMsg,null,msg.mapping)
         @socket.send(r.toFrames()) 
       @workerCallback(msg.data, cb.bind(@))
-  auth:(data)->
-
-    
-  ready:(data)->
-    logger.error('Ready')
-    ###
-    if @service
-      logger.info('worker: '+@service + ' ready')
-
-      unless @connected
-        logger.warn('worker send ready message');
-        if @disconnected
-          clearTimeout(@disconnected)
-        @socket.send(new messages.worker.ReadyMessage(@service,JSON.stringify(data)).toFrames())
-        @socket.send(new messages.worker.HeartbeatMessage().toFrames())
-      else
-        logger.warn('worker is already connected to the broker'); 
+  onAuth:(msg)->
+    logger.debug('Auth')
+    if msg.data
+      logger.debug('Auth Success')
+      if not @isAuth
+        @isAuth = true
+        @emit('authenticate')
     else
-      logger.info('client: ready')
-      unless @connected
-        if @disconnected
-          clearTimeout(@disconnected)
-        @socket.send(new messages.client.ReadyMessage().toFrames())
-        @socket.send(new messages.client.HeartbeatMessage().toFrames())
+      logger.error('Auth Failed')
+  Authenticate:(auth)->
+    logger.debug('Auth')
+    data = 
+      auth : auth
+      service : @service
+    if @connected and not @isAuth
+      if @isWorker
+        @SendWithEncrypt(new messages.worker.AuthMessage(new Buffer(JSON.stringify(data))))
       else
-        logger.warn('client is already connected to the broker'); 
-    ###
-  
+        @SendWithEncrypt(new messages.client.AuthMessage(new Buffer(JSON.stringify(data))))
 
 
+  ready:(data)->   
+    
+    if not @connected
+      @connected = true
+      @emit('connect')
+    
+    if not @isReady
+      @isReady = true      
+     
+      @emit('ready')
+    if  @auth and not @isAuth
+      @Authenticate(@auth)
 
-
-
-  onWorkerHandshake:(msg)->
+  onHandshake:(msg)->
     logger.debug('')
     if msg.data
       pub = msg.data.toString()
@@ -284,14 +286,16 @@ class Client
 
 
 
-  SendWithEncrypt:(msg)->
-    
-    
-    cipher = crypto.createCipheriv('des3', i, v) 
+  SendWithEncrypt:(msg)->    
+    console.dir msg
+    cipher = crypto.createCipheriv('des3', @key, @iv) 
+    if msg.data
+      msg.data = msg.data.toString('base64')
+    console.dir msg
     crypted = cipher.update(JSON.stringify(msg),'utf8','hex')
     crypted += cipher.final('hex')
     data = new Buffer(crypted,'hex')
-    hash = @rsaCrypto.Sign(data)
+    hash = @signer.Sign(data)
     @socket.send([data.toString('base64'),hash])
   TestReconnect:()->
     if not @connected  

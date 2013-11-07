@@ -130,9 +130,10 @@ class WorkerDisconnectMessage extends WorkerMessage
       time = defaultTimeout
     super(types.worker.DISCONNECT,null,null,envelope,null,time)
 class WorkerAuthMessage extends WorkerMessage 
-  constructor:(service,data,envelope,time)->
+  constructor:(data,envelope,time)->
     if not time
       time = defaultTimeout
+
     super(types.worker.AUTH,null,data,envelope,null,time)
 class WorkerHandshakeMessage extends WorkerMessage 
   constructor:(data,envelope,time)->
@@ -141,25 +142,38 @@ class WorkerHandshakeMessage extends WorkerMessage
     super(types.worker.Handshake,null,data,envelope,null,time)
 
 fromJSON = (frames)->
-
-  envelope = frames.Envelope
-  if frames.Protocol is 0
+  if frames.Envelope
+    envelope = frames.Envelope
+  else if frames.envelope
+    envelope = frames.envelope
+  if frames.Protocol is 0 or frames.protocol is 'MDPW02'
     protocol = 'MDPW02'
   else
     protocol = 'MDPC02'
-
-  type = frames.SendType
-  service = frames.Service
-  mapping = frames.Mapping
+  if frames.SendType
+    type = frames.SendType
+  else if frames.type
+    type = frames.type
+  if frames.Service
+    service = frames.Service
+  else if frames.service
+    service = frames.service
+  if frames.Mapping
+    mapping = frames.Mapping
+  else if frames.mapping
+    mapping = frames.mapping
   if frames.Time
     time = frames.Time
+  else if frames.time
+    time = frames.time
   else
     time = 5
   if frames.Data
     data = new Buffer(frames.Data,'base64')
-  logger.debug(frames)
-  console.dir protocol
-  console.dir type
+  else if frames.data
+    data = new Buffer(frames.data,'base64')
+  
+  
   if protocol is protocols.client
       logger.debug('types.client')
       if type is types.client.REQUEST
@@ -183,29 +197,29 @@ fromJSON = (frames)->
       else if type is types.client.Handshake
         logger.debug('types.client.Handshake')
         return new ClientHandshakeMessage(data,envelope,time)
-    else if protocol is protocols.worker
-      logger.debug('types.woker')
-      if type is types.worker.READY
-        logger.debug('types.worker.READY')
-        return new WorkerReadyMessage(service,data ,envelope,time)
-      else if type is types.worker.REQUEST
-        logger.debug('types.worker.REQUEST')
-        return new WorkerRequestMessage(service, data, envelope ,mapping,time)
-      else if type is types.worker.RESPONSE
-        logger.debug('types.worker.RESPONSE')
-        return new WorkerResponseMessage(service, data, envelope,mapping,time)
-      else if type is types.worker.HEARTBEAT
-        logger.debug('types.worker.HEARTBEAT')
-        return new WorkerHeartbeatMessage(envelope,time)
-      else if type is types.worker.DISCONNECT
-        logger.debug('types.worker.DISCONNECT')
-        return new WorkerDisconnectMessage(envelope,time)
-      else if type is types.worker.AUTH
-        logger.debug('types.worker.AUTH')
-        return new WorkerAuthMessage(data,envelope,time)
-      else if type is types.worker.Handshake
-        logger.debug('types.worker.Handshake')
-        return new WorkerHandshakeMessage(data,envelope,time)
+  else if protocol is protocols.worker
+    logger.debug('types.woker')
+    if type is types.worker.READY
+      logger.debug('types.worker.READY')
+      return new WorkerReadyMessage(envelope,time)
+    else if type is types.worker.REQUEST
+      logger.debug('types.worker.REQUEST')
+      return new WorkerRequestMessage(service, data, envelope ,mapping,time)
+    else if type is types.worker.RESPONSE
+      logger.debug('types.worker.RESPONSE')
+      return new WorkerResponseMessage(service, data, envelope,mapping,time)
+    else if type is types.worker.HEARTBEAT
+      logger.debug('types.worker.HEARTBEAT')
+      return new WorkerHeartbeatMessage(envelope,time)
+    else if type is types.worker.DISCONNECT
+      logger.debug('types.worker.DISCONNECT')
+      return new WorkerDisconnectMessage(envelope,time)
+    else if type is types.worker.AUTH
+      logger.debug('types.worker.AUTH')
+      return new WorkerAuthMessage(data,envelope,time)
+    else if type is types.worker.Handshake
+      logger.debug('types.worker.Handshake')
+      return new WorkerHandshakeMessage(data,envelope,time)
 fromFrames = (frames, hasEnvelope)->
   try
     frames = Array.prototype.slice.call(frames)
@@ -263,7 +277,7 @@ fromFrames = (frames, hasEnvelope)->
         logger.debug('types.woker')
         if type is types.worker.READY
           logger.debug('types.worker.READY')
-          return new WorkerReadyMessage(service,data ,envelope,time)
+          return new WorkerReadyMessage(envelope,time)
         else if type is types.worker.REQUEST
           logger.debug('types.worker.REQUEST')
           return new WorkerRequestMessage(service, data, envelope ,mapping,time)
