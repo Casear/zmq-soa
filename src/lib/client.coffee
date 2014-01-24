@@ -142,7 +142,6 @@ class Client extends event.EventEmitter
     if @connected
       @disconnected = setTimeout (()-> 
         @connected = false
-        @auth = false
         @isAuth = false
         logger.error('disconnected')
         @emit('disconnect')
@@ -193,17 +192,19 @@ class Client extends event.EventEmitter
         @emit('authenticate')
     else
       logger.error('Auth Failed')
-  Authenticate:(auth)->
+  Authenticate:(@auth)->
     logger.debug('Auth')
     data = 
-      auth : auth
+      auth : @auth
       service : @service
     if @connected and not @isAuth
+      logger.info('start Auth')
       if @isWorker
         @SendWithEncrypt(new messages.worker.AuthMessage(new Buffer(JSON.stringify(data))))
       else
         @SendWithEncrypt(new messages.client.AuthMessage(new Buffer(JSON.stringify(data))))
-
+    else
+      logger.debug('pass auth')
 
   ready:(data)->   
     
@@ -217,6 +218,8 @@ class Client extends event.EventEmitter
       @emit('ready')
     if  @auth and not @isAuth
       @Authenticate(@auth)
+    else
+      logger.error('without Auth')
 
   onHandshake:(msg)->
     logger.debug('')
