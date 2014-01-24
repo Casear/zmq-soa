@@ -7,8 +7,6 @@
 
   logger = require('../lib/logger').logger;
 
-  console.log(logger);
-
   net = require('net');
 
   require('should');

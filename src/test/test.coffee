@@ -1,6 +1,5 @@
 soa = require '../index'
 logger = require('../lib/logger').logger
-console.log(logger)
 net = require 'net'
 require 'should'
 broker = null

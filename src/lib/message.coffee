@@ -78,7 +78,7 @@ class ClientRequestNoRMessage extends ClientMessage
   constructor:(service, data, envelope,time)->
     if not time
       time = defaultTimeout
-    super(types.client.REQUEST_NR,service,data,envelope,time)
+    super(types.client.REQUEST_NR,service,data,envelope,null,time)
 class ClientResponseMessage extends ClientMessage
   constructor:(service, data, envelope,mapping,time)->
     if not time
@@ -141,13 +141,17 @@ class WorkerHandshakeMessage extends WorkerMessage
       time = defaultTimeout
     super(types.worker.Handshake,null,data,envelope,null,time)
 
-fromJSON = (frames)->
+fromJSON = (frames,elp)->
   if frames.Envelope
     envelope = frames.Envelope
   else if frames.envelope
     envelope = frames.envelope
-  if frames.Protocol is 0 or frames.protocol is 'MDPW02'
+  else
+    envelope = elp
+  if frames.Protocol is 0 or frames.Protocol is 'MDPW02'
     protocol = 'MDPW02'
+  else if frames.protocol is 'MDPW02'
+    protocol = frames.protocol
   else
     protocol = 'MDPC02'
   if frames.SendType

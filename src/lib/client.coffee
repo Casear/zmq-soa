@@ -180,8 +180,8 @@ class Client extends event.EventEmitter
       logger.debug('run workerCallback')
       logger.debug(msg)
       cb = (returnMsg)->
-        r = new messages.worker.ResponseMessage(msg.service,returnMsg,null,msg.mapping)
-        @socket.send(r.toFrames()) 
+        r = new messages.worker.ResponseMessage(msg.service,new Buffer(returnMsg),null,msg.mapping)
+        @SendWithEncrypt(r) 
       @workerCallback(msg.data, cb.bind(@))
   onAuth:(msg)->
     logger.debug('Auth')
@@ -263,9 +263,9 @@ class Client extends event.EventEmitter
     logger.debug(  'client : sending '+msg+' connected:'+@connected)
     if @connected
       if callback
-        @socket.send(new messages.client.RequestMessage(service, msg,null,buf,timeout).toFrames());
+        @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,buf,timeout)
       else
-        @socket.send(new messages.client.RequestNoRMessage(service, msg,null,timeout).toFrames());
+        @SendWithEncrypt new messages.client.RequestNoRMessage(service, msg,null,timeout)
       logger.debug(  'client : sent '+msg)
       if callback
         hex = buf.toString('hex')
@@ -287,11 +287,10 @@ class Client extends event.EventEmitter
 
 
   SendWithEncrypt:(msg)->    
-    console.dir msg
     cipher = crypto.createCipheriv('des3', @key, @iv) 
     if msg.data
       msg.data = msg.data.toString('base64')
-    console.dir msg
+    logger.debug JSON.stringify(msg)
     crypted = cipher.update(JSON.stringify(msg),'utf8','hex')
     crypted += cipher.final('hex')
     data = new Buffer(crypted,'hex')
