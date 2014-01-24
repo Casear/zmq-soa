@@ -143,6 +143,7 @@ class Client extends event.EventEmitter
       @disconnected = setTimeout (()-> 
         @connected = false
         @auth = false
+        @isAuth = false
         logger.error('disconnected')
         @emit('disconnect')
         @TestReconnect()
@@ -212,7 +213,7 @@ class Client extends event.EventEmitter
     
     if not @isReady
       @isReady = true      
-     
+    
       @emit('ready')
     if  @auth and not @isAuth
       @Authenticate(@auth)
