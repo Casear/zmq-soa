@@ -143,6 +143,7 @@ class WorkerHandshakeMessage extends WorkerMessage
 
 fromJSON = (frames,elp)->
   if frames.Envelope
+    
     envelope = frames.Envelope
   else if frames.envelope
     envelope = frames.envelope
@@ -163,9 +164,16 @@ fromJSON = (frames,elp)->
   else if frames.service
     service = frames.service
   if frames.Mapping
-    mapping = frames.Mapping
+    if Buffer.isBuffer(frames.Mapping)
+      mapping = frames.Mapping
+    else
+      mapping = new Buffer(frames.Mapping)
   else if frames.mapping
-    mapping = frames.mapping
+    if Buffer.isBuffer(frames.mapping)
+      mapping = frames.mapping
+    else
+      mapping = new Buffer(frames.mapping)
+    
   if frames.Time
     time = frames.Time
   else if frames.time

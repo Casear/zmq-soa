@@ -17,23 +17,23 @@ class Broker extends EventEmitter
     @workers = {}
     @clients = {}
     @queue = []  
+    @pqueue = []  
     @mapping = {}
     @rsaCrypto = {}
     @pubKey = {}
     @privKey = {}
     @socket = zmq.socket('router')
-    @Auth = (data,cb)->
-      
+    @Auth = (envelope,data,cb)->     
       if data.auth 
         if cb
           if data.service
-            cb true,data.service,data
+            cb true,envelope,data.service,data
           else
-            cb true,null,data
-        else
-          cb false
-      else
-        cb false
+            cb true,envelope,data
+        else          
+          cb false,envelope
+      else        
+        cb false,envelope
     if log
       logger = log
     if options.cert
@@ -56,6 +56,21 @@ class Broker extends EventEmitter
     logger.info("broker "+endpoint + ' started')
     @socket.on('message', @onMessage.bind(@));
     setImmediate(@executeQueue.bind(@))
+    setImmediate(@pubQueue.bind(@))
+  pubQueue:()->
+    if @pqueue.length >0      
+      message = @pqueue.shift()
+      logger.debug(message,'pQueue length:',@pqueue.length)
+      
+      if @services[message.service].worker > 0
+        if @workers[message.worker]
+          r = new messages.worker.RequestMessage(message.service, new Buffer(message.data),new Buffer(message.worker,'hex'),null,5)
+          
+          @SendWithEncrypt(r)
+      else
+        if @services[service]
+          @pqueue.push(message)
+    setImmediate(@pubQueue.bind(@))
   executeQueue:()->
 
     if @queue.length >0      
@@ -123,7 +138,7 @@ class Broker extends EventEmitter
             decrypted = decipher.update(d,'binary','hex')
             decrypted += decipher.final('hex')
             data = new Buffer(decrypted,'hex')
-            message = messages.fromJSON(JSON.parse(data.toString()))
+            message = messages.fromJSON(JSON.parse(data.toString()),envelope)
             logger.debug('Client Decrypt Success')
           else
             logger.debug('Client Signature failed')
@@ -226,7 +241,6 @@ class Broker extends EventEmitter
       clientEnvelope = message.envelope
       mapEnvelope = message.mapping  
       @SendWithEncrypt new messages.client.ResponseMessage(message.service,JSON.stringify({result:0,err:'服務不存在'}),clientEnvelope,mapEnvelope)
-      logger.error(message)
       logger.error(message.envelope.toString('hex')," to ",message.service + " not exist")
   
   onWorkerResponse:(message,envelope)->   
@@ -251,49 +265,21 @@ class Broker extends EventEmitter
     if message.data
       logger.debug('Worker auth');
       try
-        @Auth JSON.parse(message.data.toString()),((result,service,data)->
-          if result
-            
-            logger.info('Worker：'+service+' Registration')
-            e = envelope.toString('hex')
-            if @workers[e]
-              @workers[e].service = service
-              if not @services
-                @services = []
-              if not @services[service]
-                @services[service] = 
-                  waiting : []
-                  worker : 0
-              if _.indexOf(@services[service].waiting,e) is -1
-                @services[service].worker++
-                @services[service].waiting.push(e)     
-            else
-              logger.error 'worker doesn\'t exist'
-            logger.debug(service + 'Registration')       
-            @SendWithEncrypt new messages.worker.AuthMessage(new Buffer(JSON.stringify(data)),envelope)
-          else
-            @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
-          ).bind(@)
+        data = JSON.parse(message.data.toString())
+        if not @emit('auth',envelope,data,authWorkerFunc.bind(@))
+          logger.debug('auth event not defined')
+          @Auth envelope,data,authWorkerFunc.bind(@)
       catch ex
         logger.error ex
         @SendWithEncrypt new messages.worker.AuthMessage('','',envelope)
   onClientAuth:(message,envelope)->
     if message.data
-      logger.debug('Worker auth');
+      logger.debug('Client auth');
       try
-        @Auth JSON.parse(message.data.toString()),((result,data)->
-          if result
-            logger.info('Client  Registration')
-            e = envelope.toString('hex')
-            if @clients[e]
-              @clients[e].isAuth = true   
-              @SendWithEncrypt new messages.client.AuthMessage(data,envelope)
-            else
-              logger.error('client doesn\'t exist')
-          else
-            logger.info('Authenticate failed')
-            @SendWithEncrypt new messages.client.AuthMessage('',envelope)
-          ).bind(@)
+        data = JSON.parse(message.data.toString())
+        if not @emit('auth',envelope,data,authClientFunc.bind(@))
+          logger.debug('auth event not defined')
+          @Auth envelope,data,authClientFunc.bind(@)
       catch ex
         logger.error(ex)
         @SendWithEncrypt new messages.client.AuthMessage('',envelope)
@@ -355,9 +341,7 @@ class Broker extends EventEmitter
           else
             logger.error('msg timeout')
       catch
-        logger.error('decrypt failed '+message.data.toString())
- 
-    
+        logger.error('decrypt failed '+message.data.toString())   
   SendWithEncrypt:(msg)->
     
     try
@@ -385,6 +369,19 @@ class Broker extends EventEmitter
       logger.error 'Encrypt Failed'
       logger.error ex
 
+  Pub:(service,msg)->
+    for worker in @services[service].waiting
+      @pqueue.push ({
+        service:service
+        worker:worker
+        data:msg
+      })
+      logger.info({
+        service:service
+        worker:worker
+        data:msg
+      })
+
   disconnectWorker:(envelope)->
     @socket.send(new messages.worker.DisconnectMessage(envelope).toFrames())
   disconnect:()->
@@ -398,7 +395,39 @@ class Broker extends EventEmitter
         @disconnectWorker(worker)
       , @)
     , @)
-
+authClientFunc = (result,envelope,data)->
+  if result
+    logger.info('Client  Registration')
+    e = envelope.toString('hex')
+    if @clients[e]
+      @clients[e].isAuth = true   
+      @SendWithEncrypt new messages.client.AuthMessage(data,envelope)
+    else
+      logger.error('client doesn\'t exist')
+  else
+    logger.info('Authenticate failed')
+    @SendWithEncrypt new messages.client.AuthMessage('',envelope)
+authWorkerFunc = (result,envelope,service,data)->
+  if result    
+    logger.info('Worker：'+service+' Registration')
+    e = envelope.toString('hex')
+    if @workers[e]
+      @workers[e].service = service
+      if not @services
+        @services = []
+      if not @services[service]
+        @services[service] = 
+          waiting : []
+          worker : 0
+      if _.indexOf(@services[service].waiting,e) is -1
+        @services[service].worker++
+        @services[service].waiting.push(e)     
+    else
+      logger.error 'worker doesn\'t exist'
+    logger.debug(service + 'Registration')       
+    @SendWithEncrypt new messages.worker.AuthMessage(new Buffer(JSON.stringify(data)),envelope)
+  else
+    @SendWithEncrypt new messages.worker.AuthMessage('',envelope)
   
 module.exports = 
   Broker   : Broker

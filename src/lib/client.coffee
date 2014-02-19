@@ -171,27 +171,35 @@ class Client extends event.EventEmitter
         delete @callback[hex]
         delete @callbackTimeout[hex]
       else
+        console.dir(msg)
+        console.dir(@callback)
+        console.log(hex)
+        
         logger.debug('------------------callback not found---------------')
     else
       logger.debug('------------------mapping not found---------------')
   onWorkerMessage:(msg)->
     logger.debug('onWorkerMessage')
-    if @workerCallback
+    if @workerCallback  
       logger.debug('run workerCallback')
       logger.debug(msg)
       cb = (returnMsg)->
-        r = new messages.worker.ResponseMessage(msg.service,new Buffer(returnMsg),null,msg.mapping)
-        @SendWithEncrypt(r) 
+        if msg.mapping
+          r = new messages.worker.ResponseMessage(msg.service,new Buffer(returnMsg),null,msg.mapping)
+          @SendWithEncrypt(r) 
       @workerCallback(msg.data, cb.bind(@))
   onAuth:(msg)->
+
     logger.debug('Auth')
+    logger.debug(msg)
     if msg.data
       logger.debug('Auth Success')
       if not @isAuth
         @isAuth = true
-        @emit('authenticate')
+        @emit('authenticate',true)
     else
       logger.error('Auth Failed')
+      @emit('authenticate',false)
   Authenticate:(@auth)->
     logger.debug('Auth')
     data = 
@@ -207,20 +215,12 @@ class Client extends event.EventEmitter
       logger.debug('pass auth')
 
   ready:(data)->   
-    
     if not @connected
       @connected = true
       @emit('connect')
-    
     if not @isReady
-      @isReady = true      
-    
+      @isReady = true
       @emit('ready')
-    if  @auth and not @isAuth
-      @Authenticate(@auth)
-    else
-      logger.error('without Auth')
-
   onHandshake:(msg)->
     logger.debug('')
     if msg.data
