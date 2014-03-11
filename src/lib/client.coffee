@@ -16,6 +16,7 @@ class Client extends event.EventEmitter
     @options={}
     @host = ''
     @port = ''
+    @isAuth = false
     @rsaPub = null
     @signer = null
     @isWorker = false
@@ -43,8 +44,8 @@ class Client extends event.EventEmitter
       if @options.timeout
         defaultTimeout = @options.timeout
       @TestReconnect()
-  
-    
+
+
   onMsg:()->
     logger.debug('msg get')
     logger.debug(arguments)
@@ -53,11 +54,11 @@ class Client extends event.EventEmitter
       s = new Buffer(arguments[1].toString(),'base64')
 
       d = new Buffer(arguments[0].toString(),'base64')
-      
-      if @rsaPub 
+
+      if @rsaPub
         try
-          if @rsaPub.Verify(d,s)          
-            try  
+          if @rsaPub.Verify(d,s)
+            try
               decipher = crypto.createDecipheriv('des3', @key , @iv)
               decrypted = decipher.update(d,'binary','hex')
               decrypted += decipher.final('hex')
@@ -79,7 +80,7 @@ class Client extends event.EventEmitter
     else
       msg = messages.fromFrames(arguments,false)
     logger.debug(msg)
-    
+
 
     if msg instanceof messages.client.ReadyMessage
       logger.debug('client get ready message')
@@ -129,7 +130,7 @@ class Client extends event.EventEmitter
           data : if frames[6] then frames[6].toString() else ""
         }
       )
-  
+
 
   sendHeartbeat:()->
     logger.debug('Send Heartbeat')
@@ -138,11 +139,13 @@ class Client extends event.EventEmitter
     if(@isWorker)
         @socket.send(new messages.worker.HeartbeatMessage().toFrames())
     else
-      @socket.send(new messages.client.HeartbeatMessage().toFrames()) 
+      @socket.send(new messages.client.HeartbeatMessage().toFrames())
     if @connected
-      @disconnected = setTimeout (()-> 
+      @disconnected = setTimeout (()->
+
         @connected = false
         @isAuth = false
+        @isReady = false
         logger.error('disconnected')
         @emit('disconnect')
         @TestReconnect()
@@ -171,22 +174,18 @@ class Client extends event.EventEmitter
         delete @callback[hex]
         delete @callbackTimeout[hex]
       else
-        console.dir(msg)
-        console.dir(@callback)
-        console.log(hex)
-        
         logger.debug('------------------callback not found---------------')
     else
       logger.debug('------------------mapping not found---------------')
   onWorkerMessage:(msg)->
     logger.debug('onWorkerMessage')
-    if @workerCallback  
+    if @workerCallback
       logger.debug('run workerCallback')
       logger.debug(msg)
       cb = (returnMsg)->
         if msg.mapping
           r = new messages.worker.ResponseMessage(msg.service,new Buffer(returnMsg),null,msg.mapping)
-          @SendWithEncrypt(r) 
+          @SendWithEncrypt(r)
       @workerCallback(msg.data, cb.bind(@))
   onAuth:(msg)->
 
@@ -195,14 +194,13 @@ class Client extends event.EventEmitter
     if msg.data
       logger.debug('Auth Success')
       if not @isAuth
-        @isAuth = true
+        @isAuth=true
         @emit('authenticate',true)
     else
-      logger.error('Auth Failed')
       @emit('authenticate',false)
   Authenticate:(@auth)->
     logger.debug('Auth')
-    data = 
+    data =
       auth : @auth
       service : @service
     if @connected and not @isAuth
@@ -214,7 +212,7 @@ class Client extends event.EventEmitter
     else
       logger.debug('pass auth')
 
-  ready:(data)->   
+  ready:(data)->
     if not @connected
       @connected = true
       @emit('connect')
@@ -226,15 +224,15 @@ class Client extends event.EventEmitter
     if msg.data
       pub = msg.data.toString()
       if @rsaPub
-        if @pubKey is @isReady 
+        if @pubKey is @isReady
           return
         else
           logger.info("Change Key")
-          @rsaPub = new rsa(keySize,pub)  
-          @pubKey = pub    
-      else        
+          @rsaPub = new rsa(keySize,pub)
+          @pubKey = pub
+      else
           logger.info("Initial Key")
-          @rsaPub = new rsa(keySize,pub)  
+          @rsaPub = new rsa(keySize,pub)
           @pubKey = pub
     else
       @rsaPub = null
@@ -261,37 +259,67 @@ class Client extends event.EventEmitter
     else
       logger.info("Get Reconnect Command")
       @TestReconnect()
-
-  send:(service,msg,callback,timeout)->
-    buf = new Buffer( Math.floor(Math.random()*(128-1)+0) for num in [1..5])
-    logger.debug(  'client : sending '+msg+' connected:'+@connected)
+  sendBService:(msg,callback,timeout)->
     if @connected
-      if callback
-        @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,buf,timeout)
+      if @isAuth
+        if callback
+          buf = new Buffer( Math.floor(Math.random()*(128-1)+0) for num in [1..5])
+          hex = buf.toString('hex')
+          @callback[hex] = callback
+          logger.debug('timeout '+(timeout or @defaultTimeout)*1000)
+          @callbackTimeout[hex] = setTimeout((()->
+            if @callback[hex]
+              logger.error('client sending bservice timeout. message:'+msg)
+              @callback[hex]('response timeout')
+            delete @callback[hex]
+            delete @callbackTimeout[hex]
+          ).bind(@), (timeout or @defaultTimeout)*1000)
+          @SendWithEncrypt new messages.client.BServiceMessage( msg,null,buf,timeout)
+        else
+          @SendWithEncrypt new messages.client.BServiceMessage( msg,null,null,timeout)
+        logger.debug(  'client : sent bservice '+msg)
       else
-        @SendWithEncrypt new messages.client.RequestNoRMessage(service, msg,null,timeout)
-      logger.debug(  'client : sent '+msg)
-      if callback
-        hex = buf.toString('hex')
-        @callback[hex] = callback
-        logger.debug('timeout '+(timeout or @defaultTimeout)*1000)
-        @callbackTimeout[hex] = setTimeout((()->
-          if @callback[hex]
-            logger.error('client sending timeout. service:'+service + ' message:'+msg)
-            @callback[hex]('response timeout')
-          delete @callback[hex]
-          delete @callbackTimeout[hex]
-        ).bind(@), (timeout or @defaultTimeout)*1000)
+        logger.error('client auth failed ')
+        if callback
+          callback('auth failed')
     else
       logger.error('client disconnected ')
       if callback
         callback('connect failed')
-  
+  send:(service,msg,callback,timeout)->
+    logger.debug(  'client : sending '+msg+' connected:'+@connected+' auth:'+@isAuth)
+    if @connected
+      if @isAuth
+        if callback
+          buf = new Buffer( Math.floor(Math.random()*(128-1)+0) for num in [1..5])
+          hex = buf.toString('hex')
+          @callback[hex] = callback
+          logger.debug('timeout '+(timeout or @defaultTimeout)*1000)
+          @callbackTimeout[hex] = setTimeout((()->
+            if @callback[hex]
+              logger.error('client sending timeout. service:'+service + ' message:'+msg)
+              @callback[hex]('response timeout')
+            delete @callback[hex]
+            delete @callbackTimeout[hex]
+          ).bind(@), (timeout or @defaultTimeout)*1000)
+          @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,buf,timeout)
+        else
+          @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,null,timeout)
+        logger.debug(  'client : sent '+msg)
+      else
+        logger.error('client auth failed ')
+        if callback
+          callback('auth failed')
+    else
+      logger.error('client disconnected ')
+      if callback
+        callback('connect failed')
 
 
 
-  SendWithEncrypt:(msg)->    
-    cipher = crypto.createCipheriv('des3', @key, @iv) 
+
+  SendWithEncrypt:(msg)->
+    cipher = crypto.createCipheriv('des3', @key, @iv)
     if msg.data
       msg.data = msg.data.toString('base64')
     logger.debug JSON.stringify(msg)
@@ -301,7 +329,7 @@ class Client extends event.EventEmitter
     hash = @signer.Sign(data)
     @socket.send([data.toString('base64'),hash])
   TestReconnect:()->
-    if not @connected  
+    if not @connected
       @CheckNetwork ((result)->
         if result
           logger.debug("Connect IP and Port Correct")
@@ -310,7 +338,7 @@ class Client extends event.EventEmitter
             @socket.send(new messages.worker.HandshakeMessage().toFrames())
           else
             logger.debug("start worker handshake")
-            @socket.send(new messages.client.HandshakeMessage().toFrames()) 
+            @socket.send(new messages.client.HandshakeMessage().toFrames())
           setTimeout((()->
             if not @connected
               logger.debug("start Reconnect")
@@ -325,7 +353,7 @@ class Client extends event.EventEmitter
               @TestReconnect()
           ).bind(@),20000)
         ).bind(@)
-    
+
 
   CheckNetwork:(cb)->
     client = net.connect({port:@port,host:@host}, ()->
@@ -338,5 +366,5 @@ class Client extends event.EventEmitter
 
 
 
-module.exports = 
+module.exports =
   Client : Client

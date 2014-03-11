@@ -132,15 +132,16 @@
         });
       });
       return it('should create client and test to connect the broker and auth is working', function(done) {
-        client = new soa.Client('localhost', port, {});
-        client.on('connect', function() {
+        var client2;
+        client2 = new soa.Client('localhost', port, {});
+        client2.on('connect', function() {
           return logger.debug('client connected');
         });
-        client.on('ready', function() {
-          logger.debug('client ready');
-          return client.Authenticate('5678');
+        client2.on('ready', function() {
+          logger.debug('client failed ready');
+          return client2.Authenticate('5678');
         });
-        return client.on('authenticate', function(result) {
+        return client2.on('authenticate', function(result) {
           result.should.equal(false);
           return done();
         });

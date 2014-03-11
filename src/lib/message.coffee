@@ -9,11 +9,12 @@ types =
   client: 
     READY:0x01
     REQUEST: 0x02
-    REQUEST_NR: 0x03
-    RESPONSE: 0x04
-    HEARTBEAT: 0x05
+    RESPONSE: 0x03
+    HEARTBEAT: 0x04
+    DISCONNECT: 0x05
     Handshake: 0x06
     AUTH:0x07
+    BSERVICE:0x08
   worker: 
     READY: 0x01
     REQUEST: 0x02
@@ -22,7 +23,7 @@ types =
     DISCONNECT: 0x05
     Handshake: 0x06
     AUTH: 0x07
-
+    BSERVICE:0x08
 class Message 
   constructor:(@protocol, @type, @service, @data, @envelope,@mapping,@time)->
   toFrames :()->
@@ -64,6 +65,12 @@ class WorkerMessage extends Message
       time = defaultTimeout
     super(protocols.worker,type, service, data, envelope,mapping,time)
 
+class ClientBServiceMessage extends ClientMessage
+  constructor:(data,envelope,mapping,time)->
+    if not time
+      time = defaultTimeout
+    super(types.client.BSERVICE,null,data,envelope,mapping,time)
+
 class ClientReadyMessage extends ClientMessage
   constructor:(envelope)->
     if not time
@@ -74,11 +81,7 @@ class ClientRequestMessage extends ClientMessage
     if not time
       time = defaultTimeout
     super(types.client.REQUEST,service,data,envelope,mapping,time)
-class ClientRequestNoRMessage extends ClientMessage
-  constructor:(service, data, envelope,time)->
-    if not time
-      time = defaultTimeout
-    super(types.client.REQUEST_NR,service,data,envelope,null,time)
+
 class ClientResponseMessage extends ClientMessage
   constructor:(service, data, envelope,mapping,time)->
     if not time
@@ -100,7 +103,13 @@ class ClientHandshakeMessage extends ClientMessage
       time = defaultTimeout
     super(types.client.Handshake,null,data,envelope)
 
-    
+class WorkerBServiceMessage extends WorkerMessage
+  constructor:(data,envelope,mapping,time)->
+    if not time
+      time = defaultTimeout
+    super(types.worker.BService,null,data,envelope,mapping,time)
+
+
 class WorkerReadyMessage extends WorkerMessage
   constructor:(envelope,time)->
     if not time
@@ -194,9 +203,6 @@ fromJSON = (frames,elp)->
       else if type is types.client.READY
         logger.debug('types.client.READY')
         return new ClientReadyMessage(service, data, envelope,time)
-      if type is types.client.REQUEST_NR
-        logger.debug('types.client.REQUEST_NR')
-        return new ClientRequestNoRMessage(service, data, envelope,time)
       else if type is types.client.RESPONSE
         logger.debug('types.client.RESPONSE')
         return new ClientResponseMessage(service, data, envelope,mapping,time)
@@ -270,9 +276,7 @@ fromFrames = (frames, hasEnvelope)->
         else if type is types.client.READY
           logger.debug('types.client.READY')
           return new ClientReadyMessage(service, data, envelope,time)
-        if type is types.client.REQUEST_NR
-          logger.debug('types.client.REQUEST_NR')
-          return new ClientRequestNoRMessage(service, data, envelope,time)
+        
         else if type is types.client.RESPONSE
           logger.debug('types.client.RESPONSE')
           return new ClientResponseMessage(service, data, envelope,mapping,time)
@@ -332,11 +336,12 @@ module.exports =
     Message: ClientMessage,
     ReadyMessage: ClientReadyMessage
     RequestMessage: ClientRequestMessage
-    RequestNoRMessage: ClientRequestNoRMessage
+   
     ResponseMessage: ClientResponseMessage
     HeartbeatMessage: ClientHeartbeatMessage
     AuthMessage:ClientAuthMessage
     HandshakeMessage:ClientHandshakeMessage
+    BServiceMessage:ClientBServiceMessage
   worker:
     Message: WorkerMessage
     ReadyMessage: WorkerReadyMessage
@@ -346,3 +351,4 @@ module.exports =
     DisconnectMessage: WorkerDisconnectMessage
     AuthMessage:WorkerAuthMessage
     HandshakeMessage:WorkerHandshakeMessage
+    BServiceMessage:WorkerBServiceMessage
