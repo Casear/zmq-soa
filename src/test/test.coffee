@@ -45,7 +45,6 @@ describe 'Initial',()->
           throw new Error('connection failed')
         )
     )
-
   describe 'woker start',()->
     it('should create woker and test to connect the broker',(done)->
       worker = new soa.Client('localhost',port,{service:'test'},(data,cb)->
@@ -60,7 +59,6 @@ describe 'Initial',()->
       worker.on 'authenticate',(result)->
         result.should.equal(true)
         done()
-
     )
   describe 'woker auth failed',()->
     it('should create woker and test to connect the broker and auth is working',(done)->
@@ -77,9 +75,7 @@ describe 'Initial',()->
         result.should.equal(false)
         broker.services['test'].worker.should.equal(1)
         done()
-
     )
-
   describe 'client start',()->
     it('should create client and test to connect the broker',(done)->
       client = new soa.Client('localhost',port,{})
@@ -103,11 +99,7 @@ describe 'Initial',()->
       client2.on 'authenticate',(result)->
         result.should.equal(false)
         done()
-
     )
-
-
-
 describe 'Messaging',()->
   @timeout(15000)
   describe 'worker get messages',()->
@@ -115,7 +107,6 @@ describe 'Messaging',()->
       worker2 = new soa.Client('localhost',port,{service:'test2'},(data,cb)->
         logger.debug('get test2 message')
         data.toString().should.equal('message')
-
         cb(data)
         )
       worker2.on 'connect',()->
@@ -132,12 +123,10 @@ describe 'Messaging',()->
             logger.error err
             throw err
           else
-
             data.toString().should.equal('message')
           done()
           )
     )
-
     it('should get message from client without response',(done)->
       worker3 = new soa.Client('localhost',port,{service:'test3'},(data,cb)->
         logger.info('get test3 message')
@@ -159,10 +148,7 @@ describe 'Messaging',()->
         client.send('test3',new Buffer('message'),()->
           logger.info('back ')
         )
-
-
     )
-
     it('should get message from client and other worker',(done)->
       worker4 = new soa.Client('localhost',port,{service:'test4'},(data,cb)->
         logger.debug('get test4 message')
@@ -190,12 +176,11 @@ describe 'Messaging',()->
           data.toString().should.equal('message')
           done()
           )
-
     )
+
 describe 'Pub',()->
   @timeout(20000)
   describe 'Broker Send Msg ',()->
-
     it('should get message from broker',(done)->
       async.parallel([
         (callback)->
@@ -212,9 +197,6 @@ describe 'Pub',()->
           worker5.on 'authenticate',(result)->
             logger.info('worker5 successful')
             result.should.equal(true)
-
-
-
         (callback)->
           worker6 = new soa.Client('localhost',port,{service:'ppp'},(data,cb)->
             logger.debug('get pub message')
@@ -229,25 +211,25 @@ describe 'Pub',()->
           worker6.on 'authenticate',(result)->
             result.should.equal(true)
             logger.info('worker6 successful')
-
-
         (callback)->
           setTimeout ()->
-
             broker.Pub("ppp","pub message")
             callback(null)
           ,6000
-
       ], (err, result)->
-
         done()
       )
-
-
-
     )
-
-
+describe 'Service',()->
+  @timeout(20000)
+  describe 'Broker Add Service Msg ',()->
+    it('should get message from broker',(done)->
+      broker.on('service',(workerlabel,msg,cb)->
+        msg.data.toString().should.equal("{'service':'213'}")
+        done()
+      )
+      worker4.sendBService(new Buffer("{'service':'213'}"))
+    )
 ###
 
 

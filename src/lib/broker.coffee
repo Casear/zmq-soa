@@ -75,32 +75,26 @@ class Broker extends EventEmitter
     if @queue.length >0
       message = @queue.shift()
       logger.debug(message,'executeQueue length:',@queue.length)
-      service = message.service.toString()
-      logger.debug('request '+service)
-      if @services[service].worker > 0
-        worker = @services[service].waiting.shift()
-        @services[service].waiting.push(worker)
-        worklabel = null
-        if message.mapping
-            worklabel = message.mapping.toString('hex')
-            @mapping[worklabel] = message
-            @Timeout.bind(@)(worklabel,message.time*1000)
-        if message instanceof messages.client.RequestMessage
+
+      if message instanceof messages.client.RequestMessage
+        service = message.service.toString()
+        logger.debug('request '+service)
+        if @services[service].worker > 0
+          worker = @services[service].waiting.shift()
+          @services[service].waiting.push(worker)
+          worklabel = null
+          if message.mapping
+              worklabel = message.mapping.toString('hex')
+              @mapping[worklabel] = message
+              @Timeout.bind(@)(worklabel,message.time*1000)
+
           r = new messages.worker.RequestMessage(service, message.data,new Buffer(worker,'hex'),message.mapping,message.time)
           @SendWithEncrypt(r)
         else
-          if @brokerService
-            @brokerService worklabel,message,((d)->
-              if @mapping[workerlabel]
-                clientEnvelope = @mapping[workerlabel].envelope
-                mapEnvelope = @mapping[workerlabel].mapping
-                delete @mapping[workerlabel]
-                @SendWithEncrypt new messages.client.ResponseMessage(null,d,clientEnvelope,mapEnvelope)
-                logger.info("Broker to ",message.service.toString() , ' return')
-            ).bind @
+          if @services[service]
+            @queue.push(message)
       else
-        if @services[service]
-          @queue.push(message)
+          @emit('service',worklabel,message,brokerServiceFunc.bind(@))
     setImmediate(@executeQueue.bind(@))
   Timeout:(worklabel,time)->
     setTimeout (()->
@@ -156,9 +150,12 @@ class Broker extends EventEmitter
       message = messages.fromFrames(arguments, true)
     if message
       if message instanceof messages.client.Message
-        if message instanceof messages.client.RequestMessage  or message instanceof messages.client.BServiceMessage
+        if message instanceof messages.client.RequestMessage
           logger.debug('broker: on client Request')
           @onClientRequest(message);
+        else if message instanceof messages.client.BServiceMessage
+          logger.debug('broker: on client Service')
+          @onServiceRequest(message);
         else if message instanceof messages.client.HeartbeatMessage
           @onClientHeartBeat( envelope)
         else if message instanceof messages.client.HandshakeMessage
@@ -246,7 +243,10 @@ class Broker extends EventEmitter
       mapEnvelope = message.mapping
       @SendWithEncrypt new messages.client.ResponseMessage(message.service,JSON.stringify({result:0,err:'服務不存在'}),clientEnvelope,mapEnvelope)
       logger.error(message.envelope.toString('hex')," to ",message.service + " not exist")
-
+  onServiceRequest:(message)->
+    @queue.push(message)
+    logger.debug message
+    logger.info(message.envelope.toString('hex')," to Broker")
   onWorkerResponse:(message,envelope)->
     logger.debug('onWorkerResponse')
     logger.debug(@mapping)
@@ -432,6 +432,12 @@ authWorkerFunc = (result,envelope,service,data)->
     @SendWithEncrypt new messages.worker.AuthMessage(new Buffer(JSON.stringify(data)),envelope)
   else
     @SendWithEncrypt new messages.worker.AuthMessage('',envelope)
-
+brokerServiceFunc = (workerlabel,d)->
+  if @mapping[workerlabel]
+    clientEnvelope = @mapping[workerlabel].envelope
+    mapEnvelope = @mapping[workerlabel].mapping
+    delete @mapping[workerlabel]
+    @SendWithEncrypt new messages.client.ResponseMessage(null,d,clientEnvelope,mapEnvelope)
+    logger.info("Broker to ",message.service.toString() , ' return')
 module.exports =
   Broker   : Broker

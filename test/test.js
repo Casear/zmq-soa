@@ -302,6 +302,19 @@
     });
   });
 
+  describe('Service', function() {
+    this.timeout(20000);
+    return describe('Broker Add Service Msg ', function() {
+      return it('should get message from broker', function(done) {
+        broker.on('service', function(workerlabel, msg, cb) {
+          msg.data.toString().should.equal("{'service':'213'}");
+          return done();
+        });
+        return worker4.sendBService(new Buffer("{'service':'213'}"));
+      });
+    });
+  });
+
 
   /*
   

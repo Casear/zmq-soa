@@ -1,12 +1,12 @@
 logger = require('./logger').logger
-protocols = 
+protocols =
   client: 'MDPC02'
   worker: 'MDPW02'
 
 defaultTimeout = 5
 
-types = 
-  client: 
+types =
+  client:
     READY:0x01
     REQUEST: 0x02
     RESPONSE: 0x03
@@ -15,7 +15,7 @@ types =
     Handshake: 0x06
     AUTH:0x07
     BSERVICE:0x08
-  worker: 
+  worker:
     READY: 0x01
     REQUEST: 0x02
     RESPONSE: 0x03
@@ -24,7 +24,7 @@ types =
     Handshake: 0x06
     AUTH: 0x07
     BSERVICE:0x08
-class Message 
+class Message
   constructor:(@protocol, @type, @service, @data, @envelope,@mapping,@time)->
   toFrames :()->
     frames = []
@@ -35,7 +35,7 @@ class Message
     if @service
       frames.push(@service)
     else
-      frames.push('') 
+      frames.push('')
     if @mapping
       frames.push(@mapping)
     else
@@ -50,10 +50,10 @@ class Message
         frames = frames.concat(@data)
       else
         frames.push(@data)
-    
+
     frames;
 
- 
+
 class ClientMessage extends Message
   constructor:(type, service, data, envelope,mapping,time)->
     if not time
@@ -128,23 +128,23 @@ class WorkerResponseMessage extends WorkerMessage
       time = defaultTimeout
     super(types.worker.RESPONSE,service,data,envelope,mapping,time)
 
-class WorkerHeartbeatMessage extends WorkerMessage 
+class WorkerHeartbeatMessage extends WorkerMessage
   constructor:(envelope,time)->
     if not time
       time = defaultTimeout
     super(types.worker.HEARTBEAT,null,null,envelope,null,time)
-class WorkerDisconnectMessage extends WorkerMessage 
+class WorkerDisconnectMessage extends WorkerMessage
   constructor:(envelope,time)->
     if not time
       time = defaultTimeout
     super(types.worker.DISCONNECT,null,null,envelope,null,time)
-class WorkerAuthMessage extends WorkerMessage 
+class WorkerAuthMessage extends WorkerMessage
   constructor:(data,envelope,time)->
     if not time
       time = defaultTimeout
 
     super(types.worker.AUTH,null,data,envelope,null,time)
-class WorkerHandshakeMessage extends WorkerMessage 
+class WorkerHandshakeMessage extends WorkerMessage
   constructor:(data,envelope,time)->
     if not time
       time = defaultTimeout
@@ -152,7 +152,7 @@ class WorkerHandshakeMessage extends WorkerMessage
 
 fromJSON = (frames,elp)->
   if frames.Envelope
-    
+
     envelope = frames.Envelope
   else if frames.envelope
     envelope = frames.envelope
@@ -182,7 +182,7 @@ fromJSON = (frames,elp)->
       mapping = frames.mapping
     else
       mapping = new Buffer(frames.mapping)
-    
+
   if frames.Time
     time = frames.Time
   else if frames.time
@@ -193,8 +193,8 @@ fromJSON = (frames,elp)->
     data = new Buffer(frames.Data,'base64')
   else if frames.data
     data = new Buffer(frames.data,'base64')
-  
-  
+
+
   if protocol is protocols.client
       logger.debug('types.client')
       if type is types.client.REQUEST
@@ -203,6 +203,9 @@ fromJSON = (frames,elp)->
       else if type is types.client.READY
         logger.debug('types.client.READY')
         return new ClientReadyMessage(service, data, envelope,time)
+      else if type is types.client.BSERVICE
+        logger.debug('types.client.BService')
+        return new ClientBServiceMessage( data, envelope,mapping,time)
       else if type is types.client.RESPONSE
         logger.debug('types.client.RESPONSE')
         return new ClientResponseMessage(service, data, envelope,mapping,time)
@@ -223,6 +226,9 @@ fromJSON = (frames,elp)->
     else if type is types.worker.REQUEST
       logger.debug('types.worker.REQUEST')
       return new WorkerRequestMessage(service, data, envelope ,mapping,time)
+    if type is types.worker.BSERVICE
+      logger.debug('types.worker.BSERVICE')
+      return new WorkerBServiceMessage(data,envelope,mapping,time)
     else if type is types.worker.RESPONSE
       logger.debug('types.worker.RESPONSE')
       return new WorkerResponseMessage(service, data, envelope,mapping,time)
@@ -257,7 +263,7 @@ fromFrames = (frames, hasEnvelope)->
           time = 5
         data = frames[7]
       else
-   
+
         protocol = frames[0].toString('ascii')
         type = frames[1].readInt8(0)
         service = frames[2]
@@ -276,7 +282,9 @@ fromFrames = (frames, hasEnvelope)->
         else if type is types.client.READY
           logger.debug('types.client.READY')
           return new ClientReadyMessage(service, data, envelope,time)
-        
+        else if type is types.client.BSERVICE
+          logger.debug('types.client.BService')
+          return new ClientBServiceMessage( data, envelope,mapping,time)
         else if type is types.client.RESPONSE
           logger.debug('types.client.RESPONSE')
           return new ClientResponseMessage(service, data, envelope,mapping,time)
@@ -294,6 +302,9 @@ fromFrames = (frames, hasEnvelope)->
         if type is types.worker.READY
           logger.debug('types.worker.READY')
           return new WorkerReadyMessage(envelope,time)
+        if type is types.worker.BSERVICE
+          logger.debug('types.worker.BSERVICE')
+          return new WorkerBServiceMessage(data,envelope,mapping,time)
         else if type is types.worker.REQUEST
           logger.debug('types.worker.REQUEST')
           return new WorkerRequestMessage(service, data, envelope ,mapping,time)
@@ -328,15 +339,15 @@ fromFrames = (frames, hasEnvelope)->
       data : data
     }
   )
-    
-module.exports = 
+
+module.exports =
   fromFrames: fromFrames
   fromJSON: fromJSON
-  client: 
+  client:
     Message: ClientMessage,
     ReadyMessage: ClientReadyMessage
     RequestMessage: ClientRequestMessage
-   
+
     ResponseMessage: ClientResponseMessage
     HeartbeatMessage: ClientHeartbeatMessage
     AuthMessage:ClientAuthMessage
