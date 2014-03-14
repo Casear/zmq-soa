@@ -94,6 +94,9 @@ class Broker extends EventEmitter
           if @services[service]
             @queue.push(message)
       else
+        if message.mapping
+          @emit('service',worklabel,message)
+        else
           @emit('service',worklabel,message,brokerServiceFunc.bind(@))
     setImmediate(@executeQueue.bind(@))
   Timeout:(worklabel,time)->
@@ -101,7 +104,7 @@ class Broker extends EventEmitter
        if @mapping[worklabel]
         clientEnvelope = @mapping[worklabel].envelope
         mapEnvelope = @mapping[worklabel].mapping
-        @socket.send(new messages.client.ResponseMessage(@mapping[worklabel].service,JSON.stringify({result:0,err:'服務回應逾時'}),clientEnvelope,mapEnvelope).toFrames())
+        @SendWithEncrypt new messages.client.TimeoutMessage(clientEnvelope,mapEnvelope)
         logger.error(worklabel," to ",@mapping[worklabel].service.toString() , ' Timeout')
         delete @mapping[worklabel]
       ).bind(@)
@@ -202,7 +205,7 @@ class Broker extends EventEmitter
     if @clients[e]
       clearTimeout(@clients[e].checkHeartbeat)
       @clients[e].checkHeartbeat = setTimeout((()->
-          delete @clients[e]
+          @emit('disconnect',@clients[e])
           logger.info 'Client '+e+' Disconnect'
         ).bind(@),heartbeatTime)
       @socket.send(new messages.client.HeartbeatMessage(envelope).toFrames())
@@ -215,12 +218,14 @@ class Broker extends EventEmitter
       clearTimeout(@workers[e].checkHeartbeat)
       @workers[e].checkHeartbeat = setTimeout((()->
         if @workers[e]
+
           if @services[@workers[e].service]
             index = _.indexOf(@services[@workers[e].service].waiting, e)
             while index isnt -1
               @services[@workers[e].service].waiting.splice index,1
               @services[@workers[e].service].worker--
               index = _.indexOf(@services[@workers[e].service].waiting, e)
+          @emit('disconnect',@workers[e])
           logger.info 'Service '+@workers[e].service+' Worker '+e+' Disconnect'
           delete @workers[e]
         ).bind(@),heartbeatTime)
@@ -399,24 +404,27 @@ class Broker extends EventEmitter
         @disconnectWorker(worker)
       , @)
     , @)
-authClientFunc = (result,envelope,data)->
+authClientFunc = (result,envelope,data,auth)->
   if result
     logger.info('Client  Registration')
     e = envelope.toString('hex')
     if @clients[e]
       @clients[e].isAuth = true
+      @clients[e].auth = auth
       @SendWithEncrypt new messages.client.AuthMessage(data,envelope)
+      @emit 'connect',@clients[e]
     else
       logger.error('client doesn\'t exist')
   else
     logger.error('Authenticate failed')
     @SendWithEncrypt new messages.client.AuthMessage('',envelope)
-authWorkerFunc = (result,envelope,service,data)->
+authWorkerFunc = (result,envelope,service,data,auth)->
   if result
     logger.info('Worker：'+service+' Registration')
     e = envelope.toString('hex')
     if @workers[e]
       @workers[e].service = service
+      @workers[e].auth = auth
       if not @services
         @services = []
       if not @services[service]
@@ -426,6 +434,7 @@ authWorkerFunc = (result,envelope,service,data)->
       if _.indexOf(@services[service].waiting,e) is -1
         @services[service].worker++
         @services[service].waiting.push(e)
+      @emit 'connect',@workers[e]
     else
       logger.error 'worker doesn\'t exist'
     logger.debug(service + 'Registration')

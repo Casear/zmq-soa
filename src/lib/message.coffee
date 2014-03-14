@@ -15,6 +15,7 @@ types =
     Handshake: 0x06
     AUTH:0x07
     BSERVICE:0x08
+    TIMEOUT:0x09
   worker:
     READY: 0x01
     REQUEST: 0x02
@@ -24,6 +25,7 @@ types =
     Handshake: 0x06
     AUTH: 0x07
     BSERVICE:0x08
+    TIMEOUT:0x09
 class Message
   constructor:(@protocol, @type, @service, @data, @envelope,@mapping,@time)->
   toFrames :()->
@@ -102,12 +104,16 @@ class ClientHandshakeMessage extends ClientMessage
     if not time
       time = defaultTimeout
     super(types.client.Handshake,null,data,envelope)
-
+class ClientTimeoutMessage extends ClientMessage
+  constructor:(envelope,mapping)->
+    if not time
+      time = defaultTimeout
+    super(types.worker.TIMEOUT,null,null,envelope,mapping,time)
 class WorkerBServiceMessage extends WorkerMessage
   constructor:(data,envelope,mapping,time)->
     if not time
       time = defaultTimeout
-    super(types.worker.BService,null,data,envelope,mapping,time)
+    super(types.worker.BSERVICE,null,data,envelope,mapping,time)
 
 
 class WorkerReadyMessage extends WorkerMessage
@@ -209,6 +215,9 @@ fromJSON = (frames,elp)->
       else if type is types.client.RESPONSE
         logger.debug('types.client.RESPONSE')
         return new ClientResponseMessage(service, data, envelope,mapping,time)
+      else if type is types.client.TIMEOUT
+        logger.debug('types.client.HEARTBEAT')
+        return new ClientTimeoutMessage(envelope,mapping)
       else if type is types.client.HEARTBEAT
         logger.debug('types.client.HEARTBEAT')
         return new ClientHeartbeatMessage(envelope,time)
@@ -353,6 +362,7 @@ module.exports =
     AuthMessage:ClientAuthMessage
     HandshakeMessage:ClientHandshakeMessage
     BServiceMessage:ClientBServiceMessage
+    TimeoutMessage:ClientTimeoutMessage
   worker:
     Message: WorkerMessage
     ReadyMessage: WorkerReadyMessage

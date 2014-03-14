@@ -91,6 +91,9 @@ class Client extends event.EventEmitter
     else if msg instanceof messages.client.HeartbeatMessage
       logger.debug('client get heartbeat message')
       @onHeartbeat(@options.service)
+    else if msg instanceof messages.client.TimeoutMessage
+      logger.debug('client get timeout message')
+      @onClientTimeoutMessage(msg)
     else if msg instanceof messages.client.HandshakeMessage
       logger.debug('client get auth message')
       @onHandshake(msg)
@@ -163,8 +166,22 @@ class Client extends event.EventEmitter
     ).bind(@),10000
 
 
+  onClientTimeoutMessage:(msg)->
 
+    if msg.mapping
+      logger.debug('------------------mapping---------------')
+      hex = msg.mapping.toString('hex')
+      if msg.mapping and @callback[hex]
+        logger.debug('------------------callback---------------')
+        @callback[hex]('timeout', msg.data)
+        delete @callback[hex]
+        delete @callbackTimeout[hex]
+      else
+        logger.debug('------------------callback not found---------------')
+    else
+      logger.debug('------------------mapping not found---------------')
   onClientMessage:(msg)->
+
     if msg.mapping
       logger.debug('------------------mapping---------------')
       hex = msg.mapping.toString('hex')

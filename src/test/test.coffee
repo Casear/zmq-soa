@@ -22,9 +22,9 @@ describe 'Initial',()->
         if data.auth and data.auth is '123'
           if cb
             if data.service
-              cb true,envelope,data.service,data
+              cb true,envelope,data.service,data,data.auth
             else
-              cb true,envelope,data
+              cb true,envelope,data,data.auth
           else
             cb false,envelope
         else

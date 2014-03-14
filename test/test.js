@@ -1,8 +1,6 @@
 (function() {
   var async, broker, client, logger, net, port, soa, worker, worker2, worker3, worker4, worker5, worker6;
 
-
-
   soa = require('../index');
 
   logger = require('../lib/logger').logger;
@@ -42,9 +40,9 @@
           if (data.auth && data.auth === '123') {
             if (cb) {
               if (data.service) {
-                return cb(true, envelope, data.service, data);
+                return cb(true, envelope, data.service, data, data.auth);
               } else {
-                return cb(true, envelope, data);
+                return cb(true, envelope, data, data.auth);
               }
             } else {
               return cb(false, envelope);
@@ -340,6 +338,6 @@
       })
     })
   })
-  */
+   */
 
 }).call(this);
