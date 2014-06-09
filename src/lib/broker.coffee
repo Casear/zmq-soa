@@ -379,17 +379,16 @@ class Broker extends EventEmitter
       logger.error ex
 
   Pub:(service,msg)->
-    for worker in @services[service].waiting
-      @pqueue.push ({
-        service:service
-        worker:worker
-        data:msg
-      })
-      logger.info({
-        service:service
-        worker:worker
-        data:msg
-      })
+    if @services[service]
+      ws = @services[service].waiting
+      for worker in ws
+        @pqueue.push ({
+          service:service
+          worker:worker
+          data:msg
+        })
+    else
+      logger.info("service:#{service} isnt exist")
 
   disconnectWorker:(envelope)->
     @socket.send(new messages.worker.DisconnectMessage(envelope).toFrames())
