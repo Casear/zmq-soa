@@ -35,7 +35,9 @@ class Broker extends EventEmitter
       else
         cb false,envelope
     if log
-      logger = log
+      logger.setLevel('DEBUG');
+    else
+      logger.setLevel('ERROR');
     if options.cert
       keyContent = fs.readFileSync(options.cert)
       @rsaCrypto = new rsa(keySize,keyContent)
