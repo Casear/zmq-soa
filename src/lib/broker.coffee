@@ -55,8 +55,8 @@ class Broker extends EventEmitter
     @socket.bindSync(endpoint)
     logger.info("broker "+endpoint + ' started')
     @socket.on('message', @onMessage.bind(@));
-    setImmediate(@executeQueue.bind(@))
-    setImmediate(@pubQueue.bind(@))
+    setTimeout(@executeQueue.bind(@),1)
+    setTimeout(@pubQueue.bind(@),1)
   pubQueue:()->
     if @pqueue.length >0
       message = @pqueue.shift()
@@ -69,7 +69,7 @@ class Broker extends EventEmitter
       else
         if @services[service]
           @pqueue.push(message)
-    setImmediate(@pubQueue.bind(@))
+    setTimeout(@pubQueue.bind(@),1)
   executeQueue:()->
 
     if @queue.length >0
@@ -98,7 +98,7 @@ class Broker extends EventEmitter
           @emit('service',worklabel,message)
         else
           @emit('service',worklabel,message,brokerServiceFunc.bind(@))
-    setImmediate(@executeQueue.bind(@))
+    setTimeout(@executeQueue.bind(@),1)
   Timeout:(worklabel,time)->
     setTimeout (()->
        if @mapping[worklabel]
