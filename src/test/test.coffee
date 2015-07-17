@@ -153,7 +153,7 @@ describe 'Messaging',()->
       worker4 = new soa.Client('localhost',port,{service:'test4'},(data,cb)->
         logger.debug('get test4 message')
         data.toString().should.equal('message')
-        worker4.send('test',data,(err,data)->
+        worker4.send('test',data,false,(err,data)->
           logger.debug('get test message')
           if err
             throw err

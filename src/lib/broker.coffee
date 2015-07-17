@@ -115,6 +115,7 @@ class Broker extends EventEmitter
   onMessage:(envelope)->
     logger.debug('broker on Message')
     e = envelope.toString('hex')
+    encrypt = false
     if arguments.length is 3
       if @workers[e]
         logger.debug('worker try to descrypt')
@@ -127,6 +128,7 @@ class Broker extends EventEmitter
             decrypted += decipher.final('hex')
             data = new Buffer(decrypted,'hex')
             message = messages.fromJSON(JSON.parse(data.toString()),envelope)
+            encrypt = true
             logger.debug(data.toString())
             logger.debug(message)
             logger.debug('Decrypt Success')
@@ -157,7 +159,7 @@ class Broker extends EventEmitter
       if message instanceof messages.client.Message
         if message instanceof messages.client.RequestMessage
           logger.debug('broker: on client Request')
-          @onClientRequest(message);
+          @onClientRequest(message,encrypt);
         else if message instanceof messages.client.BServiceMessage
           logger.debug('broker: on client Service')
           @onServiceRequest(message);
@@ -174,7 +176,7 @@ class Broker extends EventEmitter
           @onWorkerHeartBeat(message, envelope)
         else if message instanceof messages.worker.ResponseMessage
           logger.debug('broker: on worker Response')
-          @onWorkerResponse(message, envelope)
+          @onWorkerResponse(message, envelope, encrypt)
         else if message instanceof messages.worker.DisconnectMessage
           logger.debug('broker: on worker Disconnect')
           @onWorkerDisconnect(message);
@@ -241,20 +243,23 @@ class Broker extends EventEmitter
         else
           @socket.send(new messages.worker.HeartbeatMessage(envelope).toFrames())
       ).bind(@),5000)
-  onClientRequest:(message)->
+  onClientRequest:(message,encrypt)->
     if @services.hasOwnProperty(message.service.toString())
       @queue.push(message)
       logger.info(message.envelope.toString('hex')," to ",message.service.toString())
     else
       clientEnvelope = message.envelope
       mapEnvelope = message.mapping
-      @SendWithEncrypt new messages.client.ResponseMessage(message.service,JSON.stringify({result:0,err:'服務不存在'}),clientEnvelope,mapEnvelope)
+      if encrypt
+        @SendWithEncrypt new messages.client.ResponseMessage(message.service,JSON.stringify({result:0,err:'服務不存在'}),clientEnvelope,mapEnvelope)
+      else
+        @SendWithOutEncrypt new messages.client.ResponseMessage(message.service,JSON.stringify({result:0,err:'服務不存在'}),clientEnvelope,mapEnvelope)
       logger.error(message.envelope.toString('hex')," to ",message.service + " not exist")
   onServiceRequest:(message)->
     @queue.push(message)
     logger.debug message
     logger.info(message.envelope.toString('hex')," to Broker")
-  onWorkerResponse:(message,envelope)->
+  onWorkerResponse:(message,envelope,encrypt)->
     logger.debug('onWorkerResponse')
     logger.debug(@mapping)
     if message.mapping
@@ -263,7 +268,10 @@ class Broker extends EventEmitter
         clientEnvelope = @mapping[workerlabel].envelope
         mapEnvelope = @mapping[workerlabel].mapping
         delete @mapping[workerlabel]
-        @SendWithEncrypt new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope)
+        if encrypt
+          @SendWithEncrypt new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope)
+        else
+          @SendWithOutEncrypt new messages.client.ResponseMessage(message.service,message.data,clientEnvelope,mapEnvelope)
         logger.info(workerlabel," to ",message.service.toString() , ' return')
       else
         logger.debug('onWorkerResponse without response')
@@ -379,7 +387,21 @@ class Broker extends EventEmitter
     catch ex
       logger.error 'Encrypt Failed'
       logger.error ex
+  SendWithOutEncrypt:(msg)->
 
+    try
+      e = msg.envelope.toString('hex')
+      if @workers[e] and @workers[e].isReady
+        @socket.send(msg.toFrames())
+        logger.debug('Sent')
+      else if @clients[e] and @clients[e].isReady
+        @socket.send(msg.toFrames())
+        logger.debug('Sent')
+      else
+        logger.error('worker or client #e does not exist')
+    catch ex
+      logger.error 'Encrypt Failed'
+      logger.error ex
   Pub:(service,msg)->
     if @services[service]
       ws = @services[service].waiting

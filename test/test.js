@@ -76,7 +76,7 @@
           service: 'test'
         }, function(data, cb) {
           logger.debug('get test message');
-          return cb(data);
+          return cb(data, false);
         });
         worker.on('connect', function() {
           return logger.debug('woker connected');
@@ -97,7 +97,7 @@
           service: 'test'
         }, function(data, cb) {
           logger.debug('get test message');
-          return cb(data);
+          return cb(data, false);
         });
         worker.on('connect', function() {
           return logger.debug('woker connected');
@@ -156,7 +156,7 @@
         }, function(data, cb) {
           logger.debug('get test2 message');
           data.toString().should.equal('message');
-          return cb(data);
+          return cb(data, false);
         });
         worker2.on('connect', function() {
           return logger.debug('woker4 connected');
@@ -168,7 +168,7 @@
         return worker2.on('authenticate', function(result) {
           result.should.equal(true);
           broker.services['test2'].worker.should.equal(1);
-          return client.send('test2', new Buffer('message'), function(err, data) {
+          return client.send('test2', new Buffer('message'), false, function(err, data) {
             logger.debug('test2 client back');
             if (err) {
               logger.error(err);
@@ -187,7 +187,7 @@
           logger.info('get test3 message');
           data.toString().should.equal('message');
           logger.info('send back from test3');
-          cb(data);
+          cb(data, false);
           return done();
         });
         worker3.on('connect', function() {
@@ -201,7 +201,7 @@
           result.should.equal(true);
           logger.info('send test3 message');
           broker.services['test3'].worker.should.equal(1);
-          return client.send('test3', new Buffer('message'), function() {
+          return client.send('test3', new Buffer('message'), false, function() {
             return logger.info('back ');
           });
         });
@@ -212,13 +212,13 @@
         }, function(data, cb) {
           logger.debug('get test4 message');
           data.toString().should.equal('message');
-          return worker4.send('test', data, function(err, data) {
+          return worker4.send('test', data, false, function(err, data) {
             logger.debug('get test message');
             if (err) {
               throw err;
             }
             data.toString().should.equal('message');
-            return cb(data);
+            return cb(data, false);
           });
         });
         worker4.on('connect', function() {
@@ -231,7 +231,7 @@
         return worker4.on('authenticate', function(result) {
           result.should.equal(true);
           broker.services['test4'].worker.should.equal(1);
-          return client.send('test4', new Buffer('message'), function(err, data) {
+          return client.send('test4', new Buffer('message'), false, function(err, data) {
             logger.debug('test4 client back');
             if (err) {
               throw err;

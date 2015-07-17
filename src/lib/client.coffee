@@ -356,7 +356,7 @@ class Client extends event.EventEmitter
     hash = @signer.Sign(data)
     @socket.send([data.toString('base64'),hash])
   SendWithOutEncrypt:(msg)->
-    @socket.send([msg.toFrames()])
+    @socket.send(msg.toFrames())
   TestReconnect:()->
     if not @connected
       @CheckNetwork ((result)->
