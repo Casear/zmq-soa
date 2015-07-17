@@ -49,7 +49,7 @@ describe 'Initial',()->
     it('should create woker and test to connect the broker',(done)->
       worker = new soa.Client('localhost',port,{service:'test'},(data,cb)->
         logger.debug('get test message')
-        cb(data)
+        cb(data,false)
       )
       worker.on 'connect',()->
         logger.debug('woker connected')
@@ -64,7 +64,7 @@ describe 'Initial',()->
     it('should create woker and test to connect the broker and auth is working',(done)->
       worker = new soa.Client('localhost',port,{service:'test'},(data,cb)->
         logger.debug('get test message')
-        cb(data)
+        cb(data,false)
       )
       worker.on 'connect',()->
         logger.debug('woker connected')
@@ -107,7 +107,7 @@ describe 'Messaging',()->
       worker2 = new soa.Client('localhost',port,{service:'test2'},(data,cb)->
         logger.debug('get test2 message')
         data.toString().should.equal('message')
-        cb(data)
+        cb(data,false)
         )
       worker2.on 'connect',()->
         logger.debug('woker4 connected')
@@ -132,7 +132,7 @@ describe 'Messaging',()->
         logger.info('get test3 message')
         data.toString().should.equal('message')
         logger.info('send back from test3')
-        cb(data)
+        cb(data,false)
         done()
       )
       worker3.on 'connect',()->
@@ -158,7 +158,7 @@ describe 'Messaging',()->
           if err
             throw err
           data.toString().should.equal('message')
-          cb(data)
+          cb(data,false)
           )
         )
       worker4.on 'connect',()->

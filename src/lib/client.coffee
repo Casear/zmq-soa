@@ -199,10 +199,14 @@ class Client extends event.EventEmitter
     if @workerCallback
       logger.debug('run workerCallback')
       logger.debug(msg)
-      cb = (returnMsg)->
+      cb = (returnMsg,encrypt)->
         if msg.mapping
           r = new messages.worker.ResponseMessage(msg.service,new Buffer(returnMsg),null,msg.mapping)
-          @SendWithEncrypt(r)
+          if not encrypt
+            @SendWithOutEncrypt(r)
+          else
+            @SendWithEncrypt(r)
+          
       @workerCallback(msg.data, cb.bind(@))
   onAuth:(msg)->
 
