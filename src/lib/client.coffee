@@ -303,7 +303,7 @@ class Client extends event.EventEmitter
       logger.error('client disconnected ')
       if callback
         callback('connect failed')
-  send:(service,msg,callback,timeout)->
+  send:(service,msg,encrypt,callback,timeout)->
     logger.debug(  'client : sending '+msg+' connected:'+@connected+' auth:'+@isAuth)
     if @connected
       if @isAuth
@@ -319,9 +319,15 @@ class Client extends event.EventEmitter
             delete @callback[hex]
             delete @callbackTimeout[hex]
           ).bind(@), (timeout or @defaultTimeout)*1000)
-          @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,buf,timeout)
+          if encrypt
+            @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,buf,timeout)
+          else
+            @SendWithOutEncrypt new messages.client.RequestMessage(service, msg,null,buf,timeout)
         else
-          @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,null,timeout)
+          if encrypt
+            @SendWithEncrypt new messages.client.RequestMessage(service, msg,null,null,timeout)
+          else
+            @SendWithOutEncrypt new messages.client.RequestMessage(service, msg,null,null,timeout)
         logger.debug(  'client : sent '+msg)
       else
         logger.error('client auth failed ')
@@ -345,6 +351,8 @@ class Client extends event.EventEmitter
     data = new Buffer(crypted,'hex')
     hash = @signer.Sign(data)
     @socket.send([data.toString('base64'),hash])
+  SendWithOutEncrypt:(msg)->
+    @socket.send([msg.toFrames()])
   TestReconnect:()->
     if not @connected
       @CheckNetwork ((result)->

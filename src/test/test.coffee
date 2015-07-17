@@ -117,7 +117,7 @@ describe 'Messaging',()->
       worker2.on 'authenticate',(result)->
         result.should.equal(true)
         broker.services['test2'].worker.should.equal(1)
-        client.send('test2',new Buffer('message'),(err,data)->
+        client.send('test2',new Buffer('message'),false,(err,data)->
           logger.debug('test2 client back')
           if err
             logger.error err
@@ -145,7 +145,7 @@ describe 'Messaging',()->
         logger.info('send test3 message')
         broker.services['test3'].worker.should.equal(1)
 
-        client.send('test3',new Buffer('message'),()->
+        client.send('test3',new Buffer('message'),false,()->
           logger.info('back ')
         )
     )
@@ -169,7 +169,7 @@ describe 'Messaging',()->
       worker4.on 'authenticate',(result)->
         result.should.equal(true)
         broker.services['test4'].worker.should.equal(1)
-        client.send('test4',new Buffer('message'),(err,data)->
+        client.send('test4',new Buffer('message'),false,(err,data)->
           logger.debug('test4 client back')
           if err
             throw err
