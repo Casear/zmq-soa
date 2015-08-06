@@ -36,7 +36,10 @@ class rsaCrypto
             undefined
     Verify:(o_content,d_content)->
         if  ursa.isPublicKey(@rsa) or ursa.isPrivateKey(@rsa)
-            @rsa.hashAndVerify(algorithm,o_content,d_content,'binary')
+            try
+                return @rsa.hashAndVerify(algorithm,o_content,d_content,'binary')
+            catch
+                return false
         else
             undefined
     toPem:(IsPriv)->
