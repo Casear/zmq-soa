@@ -179,7 +179,7 @@ class Broker extends EventEmitter
           @onWorkerResponse(message, envelope, encrypt)
         else if message instanceof messages.worker.DisconnectMessage
           logger.debug('broker: on worker Disconnect')
-          @onWorkerDisconnect(message);
+          @onWorkerDisconnect(message,envelope);
         else if message instanceof messages.worker.HandshakeMessage
           logger.debug('broker: on worker Handshake')
           @onWorkerHandshake(message,envelope)
@@ -276,9 +276,11 @@ class Broker extends EventEmitter
       else
         logger.debug('onWorkerResponse without response')
 
-
-
-
+  onWorkerDisconnect:(message,envelope)->
+    e = envelope.toString('hex')
+    if @workers[e]
+      logger.error('=====disconnect message========')
+      logger.error(@workers[e])
 
   onWorkerAuth:(message,envelope)->
     if message.data
